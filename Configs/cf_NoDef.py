@@ -1,7 +1,7 @@
 # Hyperparameters for a federated learning system
 # Language: Python
 
-configs_fedCAM = {
+configs_noDef = {
     "dataset": "MNIST",
     "nb_classes": 10,
 
@@ -16,8 +16,8 @@ configs_fedCAM = {
     "data_dist": "non-IID", # For the moment we are considering only the IID data distribution
     "nb_rounds": 100,  # Maximum number of communication rounds for federated learning
     "aggregation": "FedAvg",  # Aggregation method for model updates
-    "num_clients": 1000,  # Total number of clients in the federated learning system
-    "nb_clients_per_round": 50,  # Number of clients selected for each round
+    "num_clients": 100,  # Total number of clients in the federated learning system
+    "nb_clients_per_round": 20,  # Number of clients selected for each round
 
     # CVAE Settings
     "condition_dim": 10,  # Dimension of the condition in CVAE
@@ -32,7 +32,7 @@ configs_fedCAM = {
     "cvae_gamma": 1,  # Gamma value for CVAE model
 
     # Attacks/Defenses Settings
-    "with_defence": True,  # Flag indicating if defense mechanism is enabled
+    "with_defence": False,  # Flag indicating if defense mechanism is enabled
     #"skip_cvae": True, # Skip the cvae 
     "size_trigger": 100,  # Trigger size for defense mechanism
     #"attacker_ratio": 0.1,  # Ratio of attackers in the system

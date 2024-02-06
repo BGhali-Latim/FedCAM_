@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 from geom_median.torch import compute_geometric_median
-from Models.autoencoders import CVAE
+from Models.autoencoders import VAE
 from Models.MLP import MLP
 from Utils.Utils import Utils
 import datetime 
@@ -27,13 +27,13 @@ class Server:
         if not cf["with_defence"]:
             self.dir_path = f"Results/{self.cf['dataset']}/NoDefence/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
         else :
-            self.dir_path = f"Results/{self.cf['dataset']}/FedCAM/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
+            self.dir_path = f"Results/{self.cf['dataset']}/FedCAM2/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
 
         if os.path.exists(self.dir_path):
             shutil.rmtree(self.dir_path)
         os.makedirs(self.dir_path)
 
-        self.activation_size = cf["cvae_input_dim"]
+        self.activation_size = cf["vae_input_dim"]
         self.num_classes = cf["num_classes"]
         self.nb_rounds = cf["nb_rounds"]
         self.global_model = model.to(self.device) if model else MLP(self.activation_size).to(self.device)
@@ -48,11 +48,11 @@ class Server:
             "batch_size": cf["batch_size"]
         }
 
-        self.config_cvae = {
-            "cvae_nb_ep": cf["cvae_nb_ep"],
-            "cvae_lr": cf["cvae_lr"],
-            "cvae_wd": cf["cvae_wd"],
-            "cvae_gamma": cf["cvae_gamma"],
+        self.config_vae = {
+            "vae_nb_ep": cf["vae_nb_ep"],
+            "vae_lr": cf["vae_lr"],
+            "vae_wd": cf["vae_wd"],
+            "vae_gamma": cf["vae_gamma"],
         }
         
         #self.train_for_test = datasets.MNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
@@ -71,13 +71,12 @@ class Server:
         self.are_attackers = np.array([int(client.is_attacker) for client in self.clients])
         self.are_benign = np.array([int(not(client.is_attacker)) for client in self.clients])
 
-        self.cvae_trained = False
+        self.vae_trained = False
 
         self.trigger_loader, self.test_loader = Utils.get_test_data(cf["size_trigger"], cf["dataset"])
 
-        self.cvae = CVAE(
-            input_dim=cf["cvae_input_dim"],
-            condition_dim=self.cf["condition_dim"],
+        self.vae = VAE(
+            input_dim=cf["vae_input_dim"],
             hidden_dim=self.cf["hidden_dim"],
             latent_dim=self.cf["latent_dim"]
         ).to(self.device)
@@ -103,110 +102,92 @@ class Server:
         self.best_accuracy, self.best_round = 0, 0
 
         self.histo_selected_clients = torch.tensor([])
-
-    def train_cvae(self):
-        if self.cvae_trained:
-            print("CVAE is already trained, skipping re-training.")
+    
+    def train_vae(self):
+        if self.vae_trained:
+            print("vae is already trained, skipping re-training.")
             return
-
-        init_ep = 10
-        labels_act = 0
-        input_models_act =  torch.zeros(size=(init_ep, self.cf["size_trigger"], self.activation_size)).to(self.device)
-        input_cvae_model = deepcopy(self.global_model)
-
-        criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(input_cvae_model.parameters(), lr=self.cf["lr"], weight_decay=self.cf["wd"])
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        for epoch in range(init_ep):
-            for data, labels in self.trigger_loader:
-                data, labels = data.to(device), labels.to(device)
-                outputs = input_cvae_model(data)
-                loss = criterion(outputs, labels)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                input_models_act[epoch] = input_cvae_model.get_activations(data)
-                labels_act = labels
-                break
-
-        gm = compute_geometric_median(input_models_act.cpu(), weights=None)
-        input_models_act = input_models_act - gm.median.to(self.device)
-        input_models_act = torch.sigmoid(input_models_act).detach()
-
-        num_epochs = self.config_cvae["cvae_nb_ep"]
-        optimizer = torch.optim.Adam(self.cvae.parameters(), lr=self.config_cvae["cvae_lr"],
-                                     weight_decay=self.config_cvae["cvae_wd"])
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 300],
-                                                         gamma=self.config_cvae["cvae_gamma"])
-
+        num_epochs = self.config_vae["vae_nb_ep"]
+        optimizer = torch.optim.Adam(self.vae.parameters(), lr=self.config_vae["vae_lr"], weight_decay=self.config_vae["vae_wd"])
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[200, 300], gamma=self.config_vae["vae_gamma"])
+        model = deepcopy(self.global_model)
+        model.eval()
+        # act_means = torch.zeros((self.num_classes, self.activation_size)).to(self.device)
+        act_means = torch.normal(mean=0.0, std=1, size=(self.num_classes, self.activation_size), device=self.device)
+        act_means =  torch.tanh(act_means)
         for epoch in range(num_epochs):
             train_loss = 0
-            loop = tqdm(input_models_act, leave=True)
-            for batch_idx, activation in enumerate(loop):
-
-                condition = Utils.one_hot_encoding(labels_act, self.num_classes, self.device)
-                recon_batch, mu, logvar = self.cvae(activation, condition)
-                loss = Utils.cvae_loss(recon_batch, activation, mu, logvar)
-
+            loop = tqdm(self.trigger_loader, leave=True)
+            for batch_idx, _ in enumerate(loop):
+                recon_batch, mu, logvar = self.vae(act_means)
+                loss = Utils.cvae_loss(recon_batch, act_means, mu, logvar)
                 optimizer.zero_grad()
                 loss.backward()
                 train_loss += loss.item()
                 optimizer.step()
-
                 loop.set_description(f"Epoch [{epoch}/{num_epochs}]")
                 loop.set_postfix(loss=train_loss / (batch_idx + 1))
-
             scheduler.step()
-        self.cvae_trained = True
-
+        self.vae_trained = True
+    
     def compute_reconstruction_error(self, selected_clients):
-        self.cvae.eval()
+        self.vae.eval()
+        clients_re = torch.zeros((len(selected_clients) ,self.num_classes)).to(self.device)
+        act_means = torch.zeros((len(selected_clients) ,self.num_classes, self.activation_size)).to(self.device)
 
-        clients_re = []
-
-        clients_act = torch.zeros(size=(len(selected_clients), self.cf["size_trigger"], self.activation_size)).to(self.device)
-        labels_cat = torch.tensor([]).to(self.device)
-
-        for client_nb, client_model in enumerate(selected_clients):
-            labels_cat = torch.tensor([]).to(self.device)
+        for client_num, client in enumerate(selected_clients):
+            client.model.eval()
             for data, label in self.trigger_loader:
                 data, label = data.to(self.device), label.to(self.device)
-                activation = client_model.model.get_activations(data)
-                clients_act[client_nb] = activation
-                labels_cat = label
-                break
+                activation = client.model.get_activations(data).detach()
+                # Since we have one batch, we don't t need to divide by the number of batch for act_means
+                for i in range(self.num_classes):
+                    act_means[client_num][i] = torch.mean(activation[label==i], dim=0)
 
-        gm = compute_geometric_median(clients_act.cpu(), weights=None)
+        # mean = torch.mean(act_means, dim=0)
+        # act_means = (act_means - mean)
+        gm = compute_geometric_median(act_means.cpu(), weights=None)  # equivalent to `weights = torch.ones(n)`.
+        gm = gm.median.to(self.device)
 
-        #if self.cf["skip_cvae"]: 
-        #    for client_act in clients_act : 
-        #        mse = F.mse_loss(gm.median.to(self.device), client_act, reduction='mean').item()
-        #        clients_re.append(mse)
-        #    return clients_re
+        #print("here5", act_means)
+        act_means = (act_means - gm)
+        #print("here2", act_means)
+        act_means = torch.tanh(act_means)
 
-        clients_act = clients_act - gm.median.to(self.device)
-        # clients_act = torch.abs(clients_act)
-        clients_act = torch.sigmoid(clients_act)
+        for i, client_act in enumerate(act_means):
+            recon_batch, mu, logvar = self.vae(client_act)
+            mse = F.mse_loss(recon_batch, client_act, reduction='none')
+            mse = torch.mean(mse, dim=1)
+            clients_re[i] = mse
 
-        for client_act in clients_act:
-            condition = Utils.one_hot_encoding(labels_cat, self.num_classes, self.device).to(self.device)
-            recon_batch, _, _ = self.cvae(client_act, condition)
-            mse = F.mse_loss(recon_batch, client_act, reduction='mean').item()
-            clients_re.append(mse)
+        # Normalization step
+        # # Calcul de la moyenne et de l'écart type pour chaque colonne
+        # mean = clients_re.mean(dim=0)
+        # std = clients_re.std(dim=0)
+        #
+        # # Normalisation du tensor
+        # clients_re = (clients_re - mean) / std
+            
+        # Calculer les valeurs min et max pour chaque colonne (classe)
+        min_vals = clients_re.min(dim=0)[0]
+        max_vals = clients_re.max(dim=0)[0]
 
-        return clients_re
+        # Appliquer la normalisation Max-Min
+        clients_re = (clients_re - min_vals) / (max_vals - min_vals)
+        res = clients_re.mean(dim=1)
+        
+        return res.tolist()
 
     def run(self):
         t_start = datetime.datetime.now()
 
         if self.defence:
-            if not self.cvae_trained:
-                self.train_cvae()
-                self.cvae_trained = True
-                #if not self.cf["skip_cvae"]:
-                #    self.train_cvae()
-                #    self.cvae_trained = True
+            if not self.vae_trained:
+                self.train_vae()
+                self.vae_trained = True
+                #if not self.cf["skip_vae"]:
+                #    self.train_vae()
+                #    self.vae_trained = True
         
         # REVERT 
         total_attackers_passed = 0 
@@ -308,12 +289,12 @@ class Server:
                     passing_attacker_profile_this_round.append(client.num_samples)
                 else : 
                     passing_benign_profile_this_round.append(client.num_samples)
-            
+
             self.passing_attacker_profiles_per_round.append(passing_attacker_profile_this_round)
             self.attacker_profiles_per_round.append(attacker_profile_this_round)
             self.passing_benign_profiles_per_round.append(passing_benign_profile_this_round)
             self.benign_profiles_per_round.append(benign_profile_this_round)
-        
+
         print(f"finished running server in {datetime.datetime.now() - t_start}")
 
         # Saving The accuracies of the Global model on the testing set and the backdoor set

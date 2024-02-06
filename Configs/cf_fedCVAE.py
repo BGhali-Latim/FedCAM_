@@ -2,16 +2,19 @@
 # Language: Python
 
 configs_fedCVAE = {
+    "dataset": "MNIST",
+    "nb_classes": 10,
+
     # Clients Settings
-    "num_epochs": 14,  # Number of epochs for training
-    "batch_size": 64,  # Batch size for training
-    "lr": 1e-3,  # Learning rate
+    "num_epochs": 5,  # Number of epochs for training
+    "batch_size": 256,  # Batch size for training
+    "lr": 5e-4,  # Learning rate
     "num_classes": 10,  # Number of classes in the dataset
     "wd": 1e-5,  # Weight decay for Clients model
     "activation_size": 128,
 
     #FL Settings
-    "data_dist": "IID", # For the moment we are considering only the IID data distribution
+    "data_dist": "non-IID", # For the moment we are considering only the IID data distribution
     "nb_rounds": 100,  # number of communication rounds for federated learning and the Dimension of FedCVAE condition
     "aggregation": "FedAvg",  # Aggregation method for model updates
     "num_clients": 1000,  # Total number of clients in the federated learning system
@@ -26,8 +29,8 @@ configs_fedCVAE = {
 
     # Attacks/Defenses Settings
     "with_defence": True,  # Flag indicating if defense mechanism is enabled
-    "attacker_ratio": 0.1,  # Ratio of attackers in the system
-    "attack_type": 'AdditiveNoise',  # Type of attack (e.g., SameValue, AdditiveNoise)
+    #"attacker_ratio": 0.3,  # Ratio of attackers in the system
+    #"attack_type": 'SignFlip',  # Type of attack (e.g., SameValue, AdditiveNoise)
     # 0: 'NoAttack' 1: 'AdditiveNoise', 2: 'SameValue', 3: 'SignFlip',  4: 'NaiveBackdoor', 5: 'SquareBackdoor'
 
     # Parameters of  NaiveBackdoor and SquareBackdoor attacks

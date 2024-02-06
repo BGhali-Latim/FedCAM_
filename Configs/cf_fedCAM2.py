@@ -1,7 +1,7 @@
 # Hyperparameters for a federated learning system
 # Language: Python
 
-configs_fedCAM = {
+configs_fedCAM2 = {
     "dataset": "MNIST",
     "nb_classes": 10,
 
@@ -19,21 +19,21 @@ configs_fedCAM = {
     "num_clients": 1000,  # Total number of clients in the federated learning system
     "nb_clients_per_round": 50,  # Number of clients selected for each round
 
-    # CVAE Settings
-    "condition_dim": 10,  # Dimension of the condition in CVAE
-    "latent_dim": 8,  # Dimension of the latent space in CVAE
-    "hidden_dim": 100,  # Dimension of the hidden layer in CVAE
-    "cvae_input_dim": 3200,  # Dimension of the input for CVAE and the size of the activation maps ("activation_size")
-    # "cvae_input_dim": 32*10*10,  # Dimension of the input for CVAE and the size of the activation maps ("activation_size")
+    # vae Settings
+    "condition_dim": 10,  # Dimension of the condition in vae
+    "latent_dim": 8,  # Dimension of the latent space in vae
+    "hidden_dim": 100,  # Dimension of the hidden layer in vae
+    "vae_input_dim": 3200,  # Dimension of the input for vae and the size of the activation maps ("activation_size")
+    # "vae_input_dim": 32*10*10,  # Dimension of the input for vae and the size of the activation maps ("activation_size")
     # which is the output of FC2 in our case 128
-    "cvae_nb_ep": 10,  # Number of epochs for training a CVAE model
-    "cvae_lr": 1e-2,  # Learning rate for CVAE model
-    "cvae_wd": 0,  # Weight decay for CVAE model 1e-5
-    "cvae_gamma": 1,  # Gamma value for CVAE model
+    "vae_nb_ep": 10,  # Number of epochs for training a vae model
+    "vae_lr": 1e-2,  # Learning rate for vae model
+    "vae_wd": 0,  # Weight decay for vae model 1e-5
+    "vae_gamma": 1,  # Gamma value for vae model
 
     # Attacks/Defenses Settings
     "with_defence": True,  # Flag indicating if defense mechanism is enabled
-    #"skip_cvae": True, # Skip the cvae 
+    #"skip_vae": True, # Skip the vae 
     "size_trigger": 100,  # Trigger size for defense mechanism
     #"attacker_ratio": 0.1,  # Ratio of attackers in the system
     #"attack_type": 'AdditiveNoise',  # Type of attack (e.g., SameValue, AdditiveNoise)
