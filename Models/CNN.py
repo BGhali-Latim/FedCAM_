@@ -27,6 +27,7 @@ class CNN(nn.Module):
         return F.log_softmax(x, dim=1)
 
     def get_activations(self, x):
+        x = x.view(-1, 1, 28, 28)
         x = F.relu(self.conv1(x))
         #x = F.dropout(x, p=0.5, training=self.training)
         x = F.max_pool2d(self.conv2(x), 2)

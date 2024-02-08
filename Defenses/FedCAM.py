@@ -66,14 +66,29 @@ class Server:
         elif self.cf['data_dist'] == "non-IID" :
             self.train_data = Utils.distribute_non_iid_data_among_clients(self.config_FL["num_clients"], cf["batch_size"], dataset=cf["dataset"])
         print("generating clients")
+
+        if self.cf["dataset"] == "FEMNIST" :
+            print("splitting train into trigger and test")
+            self.train_data, self.trigger_loader, self.test_loader = Utils.split_train(
+                self.train_data, cf["size_trigger"], cf["size_test"])
+        else : 
+            print("getting test data")
+            self.trigger_loader, self.test_loader = Utils.get_test_data(cf["size_trigger"], cf["dataset"])
+        
+        #for sample in self.trigger_loader :
+        #    print(f"trigger data sample : {sample[0].size()}")
+        #    print(f"trigger label sample : {sample[1].size()}, {sample[1]}")
+        #    
+        #for sample in self.test_loader :
+        #    print(f"test data sample : {sample[0].size()}")
+        #    print(f"test label sample : {sample[1].size()}, {sample[1]}")
+        
         self.clients = Utils.gen_clients(self.config_FL, self.attack_type, self.train_data, backdoor_label= cf["source"])
 
         self.are_attackers = np.array([int(client.is_attacker) for client in self.clients])
         self.are_benign = np.array([int(not(client.is_attacker)) for client in self.clients])
 
         self.cvae_trained = False
-
-        self.trigger_loader, self.test_loader = Utils.get_test_data(cf["size_trigger"], cf["dataset"])
 
         self.cvae = CVAE(
             input_dim=cf["cvae_input_dim"],

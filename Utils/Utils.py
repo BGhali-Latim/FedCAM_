@@ -6,6 +6,7 @@ import torch
 from math import floor
 
 from tqdm import tqdm
+import h5py
 
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Subset, random_split
@@ -13,8 +14,11 @@ from torchvision import datasets
 from torchvision.transforms import transforms
 import torch.nn.functional as F
 
+import torchvision.transforms.functional as TF
+
 from Client.Client import Client
-#from custom_datasets.Datasets import OneLabelDataset
+from custom_datasets.Datasets import SyntheticLabeledDataset
+from custom_datasets.FEMNIST_pytorch import femnist
 
 class Utils:
     def __init__(self):
@@ -24,6 +28,8 @@ class Utils:
     def distribute_iid_data_among_clients(num_clients, batch_size, dataset):
         if dataset == "MNIST" :
             data = datasets.MNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
+        elif dataset == "FashionMNIST" :
+            data = datasets.FashionMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
         elif dataset == "CIFAR10" : 
             trans_cifar_train = transforms.Compose([
             #transforms.RandomCrop(32, padding=4),
@@ -42,6 +48,41 @@ class Utils:
         if dataset == "MNIST" :
             train_data = datasets.MNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
             size_def = 2000
+        elif dataset == "FashionMNIST" :
+            train_data = datasets.FashionMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
+            size_def = 2000
+        elif dataset == "FEMNIST": 
+            #train_data = femnist.FEMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
+            #data_size = len(train_data) // num_clients
+            #return [
+            #    DataLoader(Subset(train_data, range(i * data_size, (i + 1) * data_size)),
+            #               batch_size=batch_size, shuffle=True, drop_last=False)
+            #    for i in range(num_clients)]
+            # load the dataset
+            print("loading dataset")
+            ds = h5py.File('./data/write_digits.hdf5', 'r')
+            # get the key of each writer datasets
+            writers = sorted(ds.keys())
+            subdatasets = []
+            print("generating subdatasets")
+            for writer in tqdm(writers) :
+                # get the images and labels of the first writer as numpy array
+                images = ds[writer]['images'][:]
+                labels = ds[writer]['labels'][:]
+                # transform the images and labels to torch tensor
+                images_tensor = TF.to_tensor(images).view(-1,28,28) #HERE
+                labels_tensor = torch.from_numpy(labels).view(-1).long()
+                # Dataset 
+                tmp = SyntheticLabeledDataset(images_tensor, labels_tensor)
+                subdatasets.append(torch.utils.data.DataLoader(
+                    tmp,
+                    batch_size=batch_size,
+                    shuffle=True,
+                    drop_last=False,
+                    num_workers=4,
+                    pin_memory=True,
+                ))
+            return subdatasets
         elif dataset == "CIFAR10" : 
             trans_cifar_train = transforms.Compose([
             #transforms.RandomCrop(32, padding=4),
@@ -297,11 +338,20 @@ class Utils:
                                         train=False,
                                         transform=transforms.ToTensor(),
                                         download=True)
+        elif dataset == "FashionMNIST" :
+            data_test = datasets.FashionMNIST(root='./data',
+                                        train=False,
+                                        transform=transforms.ToTensor(),
+                                        download=True)
+        elif dataset == "FEMNIST":
+            data_test = femnist.FEMNIST(root='./data', 
+                                        train=False, 
+                                        transform=transforms.ToTensor(), 
+                                        download=True)
         elif dataset == "CIFAR10" :
-            trans_cifar_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-            ])
+            trans_cifar_test = transforms.Compose([transforms.ToTensor(),
+                                                transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                                (0.2023, 0.1994, 0.2010)),])
             data_test = datasets.CIFAR10(root='./data',
                                         train=False,
                                         transform=trans_cifar_test,
@@ -312,6 +362,35 @@ class Utils:
         trigger_loader = DataLoader(trigger_set, batch_size=size_trigger, shuffle=False, drop_last=False) if size_trigger else None
         test_loader = DataLoader(validation_set, batch_size=size_test, shuffle=False, drop_last=False)
         return trigger_loader, test_loader
+    
+    @staticmethod
+    def split_train(train_loaders, size_trigger, size_test):
+        random.shuffle(train_loaders)
+        train_data = train_loaders[size_trigger+size_test:]
+        print("preparing trigger")
+        trigger_data = Utils.concat_loaders(train_loaders[:size_trigger], size_trigger)
+        print("preparing train")
+        test_data = Utils.concat_loaders(train_loaders[size_trigger:size_trigger+size_test], size_test)
+        return train_data, trigger_data, test_data
+    
+    @staticmethod
+    def concat_loaders(loader_list, batch_size):
+        data, labels = [], []
+        for loader in tqdm(loader_list) : 
+            for data_batch, label_batch in loader :
+                data.append(data_batch)
+                labels.append(label_batch)
+        data_tensor, label_tensor = torch.cat(data), torch.cat(labels)
+        tmp = SyntheticLabeledDataset(data_tensor, label_tensor.view(-1))
+        combined_loader =torch.utils.data.DataLoader(
+            tmp,
+            batch_size=batch_size,
+            shuffle=True,
+            drop_last=False,
+            num_workers=4,
+            pin_memory=True,
+        )
+        return combined_loader
 
     @staticmethod
     def select_clients(clients, nb_clients_per_round):
@@ -351,6 +430,7 @@ class Utils:
 
     @staticmethod
     def one_hot_encoding(label, num_classes, device):
+        label = label.to(device)
         one_hot = torch.eye(num_classes).to(device)[label]
         return one_hot.squeeze(1).to(device)
 

@@ -70,6 +70,7 @@ class Client:
                 if self.is_attacker and self.attack_type == "NoiseBackdoor":
                     data, labels = noise_backdoor(data, labels, hp["source"], hp["target"], hp["back_noise_avg"], hp["back_noise_std"])
 
+
                 outputs = self.model(data)
                 loss = criterion(outputs, labels)
                 optimizer.zero_grad()
