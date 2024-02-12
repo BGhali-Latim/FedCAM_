@@ -2,7 +2,7 @@
 # Language: Python
 
 configs_noDef = {
-    "dataset": "MNIST",
+    "dataset": "FashionMNIST",
     "nb_classes": 10,
 
     # Clients Settings
@@ -16,8 +16,8 @@ configs_noDef = {
     "data_dist": "non-IID", # For the moment we are considering only the IID data distribution
     "nb_rounds": 100,  # Maximum number of communication rounds for federated learning
     "aggregation": "FedAvg",  # Aggregation method for model updates
-    "num_clients": 100,  # Total number of clients in the federated learning system
-    "nb_clients_per_round": 20,  # Number of clients selected for each round
+    "num_clients": 1000,  # Total number of clients in the federated learning system
+    "nb_clients_per_round": 50,  # Number of clients selected for each round
 
     # CVAE Settings
     "condition_dim": 10,  # Dimension of the condition in CVAE

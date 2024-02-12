@@ -1,6 +1,7 @@
 import copy
 import os
 import numpy as np
+import tqdm
 import torch
 import torch.nn.functional as F
 
@@ -53,7 +54,7 @@ class Server:
         print("generating clients")
         self.clients = Utils.gen_clients(self.config_FL, self.attack_type, self.train_data)
 
-        self.validation_loader, self.test_loader = Utils.get_test_data(cf["validation_size"], dataset="MNIST")
+        self.validation_loader, self.test_loader = Utils.get_test_data(cf["validation_size"], dataset=cf["dataset"])
 
         # Done
         total_weights = sum(param.numel() for param in self.global_model.parameters()  if param.dim() > 1)
@@ -181,6 +182,10 @@ class Server:
                 print(
                     f"Round {rounds + 1}/{self.cf['nb_rounds']} attacker accuracy: {self.accuracy_backdoor[-1] * 100:.2f}%")
             
+            # Clean up after update step (to save GPU memory)
+            for client in tqdm(selected_clients):
+                client.remove_model()
+
             total_attackers_passed += nb_attackers_passed
             total_attackers += nb_attackers
 

@@ -1,5 +1,6 @@
 from copy import deepcopy
 import os
+import gc
 import shutil
 import numpy as np
 import torch
@@ -222,19 +223,24 @@ class Server:
                 #if not self.cf["skip_cvae"]:
                 #    self.train_cvae()
                 #    self.cvae_trained = True
-        
+    
         # REVERT 
         total_attackers_passed = 0 
         total_attackers = 0
 
         for rounds in range(self.cf["nb_rounds"]):
+            
             torch.cuda.empty_cache()
 
             selected_clients = Utils.select_clients(self.clients, self.config_FL["nb_clients_per_round"])
 
+            print("before copies")
+            print(torch.cuda.memory_summary())
             for client in tqdm(selected_clients):
                 client.set_model(deepcopy(self.global_model).to(self.device))
                 client.train(self.cf)
+            print("after copies")
+            print(torch.cuda.memory_summary())
 
             if self.defence:
                 clients_re = self.compute_reconstruction_error(selected_clients)
@@ -269,9 +275,11 @@ class Server:
 
             print("Total of Selected Clients ", len(selected_clients), ", Number of attackers ", nb_attackers,
                   ", Total of attackers passed defense ", nb_attackers_passed, " out of ", len(good_updates), " total updates")
+            
 
             # Aggregation step
             self.global_model.load_state_dict(Utils.aggregate_models(good_updates))
+
 
             # Add the accuracy of the current global model to the accuracy list
             #self.accuracy_on_train.append(Utils.test(self.global_model, self.device, self.train_for_test_loader))
@@ -290,7 +298,11 @@ class Server:
             if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"] :
                 print(f"Round {rounds + 1}/{self.cf['nb_rounds']} attacker accuracy: {self.accuracy_backdoor[-1] * 100:.2f}%")
             
-            # REVERT
+            # Clean up after update step (to save GPU memory)
+            for client in tqdm(selected_clients):
+                client.remove_model()
+            
+            # METRICS
             total_attackers_passed += nb_attackers_passed
             total_attackers += nb_attackers
 

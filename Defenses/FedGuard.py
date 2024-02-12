@@ -174,6 +174,10 @@ class Server:
             if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"]:
                 print(
                     f"Round {rounds + 1}/{self.cf['nb_rounds']} attacker accuracy: {self.accuracy_backdoor[-1] * 100:.2f}%")
+            
+            # Clean up after update step (to save GPU memory)
+            for client in tqdm(selected_clients):
+                client.remove_model()
                 
             # REVERT
             total_attackers_passed += nb_attackers_passed

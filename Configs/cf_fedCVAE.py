@@ -2,7 +2,7 @@
 # Language: Python
 
 configs_fedCVAE = {
-    "dataset": "MNIST",
+    "dataset": "FashionMNIST",
     "nb_classes": 10,
 
     # Clients Settings
