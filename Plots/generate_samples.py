@@ -36,7 +36,7 @@ def collect_results_several(Results_dir, experiment_list, resultfile_name, basel
             results_dict["Baseline"]=list(json.load(source))
     for experiment in experiment_list:
         with open(os.path.join(Results_dir,experiment,resultfile_name),'r') as source:
-            results_dict[experiment.replace("_"," ")]=list(json.load(source))
+            results_dict[experiment]=list(json.load(source))
     return results_dict
 
 def collect_results_single(Results_dir, experiment_dirname, metric_list, baseline = True):
@@ -95,7 +95,7 @@ if __name__ == "__main__" :
         df = pd.DataFrame.from_dict(results_dict)
         print(df.head())
         df.to_csv("accuracies.csv")
-    elif args.mode == "batch" : 
+    elif args.mode == "several" : 
         results_dict = collect_results_several(args.result_dir, args.experiment_list, args.metric, args.baseline)
         df = pd.DataFrame.from_dict(results_dict)
         print(df.head())

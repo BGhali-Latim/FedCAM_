@@ -24,7 +24,7 @@ class Server:
         if not cf["with_defence"]:
             self.dir_path = f"Results/{self.cf['dataset']}/NoDefence/{self.cf['data_dist']}_{int(self.attacker_ratio * 100)}_{self.attack_type}"
         else :
-            self.dir_path = f"Results/{self.cf['dataset']}/FedGuard/{self.cf['data_dist']}_{int(self.attacker_ratio * 100)}_{self.attack_type}"
+            self.dir_path = f"Results/{self.cf['dataset']}/FedGuard1000/{self.cf['data_dist']}_{int(self.attacker_ratio * 100)}_{self.attack_type}"
         
         os.makedirs(self.dir_path, exist_ok=True)
 
@@ -223,12 +223,15 @@ class Server:
         if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"]:
             Utils.save_to_json(self.accuracy_backdoor, self.dir_path,
                                f"{self.attack_type}_accuracy_{self.cf['nb_rounds']}")
+        
+        # Save the training config 
+        Utils.save_to_json(self.cf, self.dir_path, "run_config.json")
             
         # Saving the percentage of attackers blocked
         Utils.save_to_json((total_attackers_passed/total_attackers)*100, self.dir_path, f"successful_attacks")
         # Detection qulity metrics to JSON
-        Utils.save_to_json(self.attacker_precision_hist, self.dir_path, f"Attacker_detection_precision_{self.cf['nb_rounds']}")
-        Utils.save_to_json(self.attacker_recall_hist, self.dir_path, f"Attacker_detection_recall_{self.cf['nb_rounds']}")
+        Utils.save_to_json(self.attacker_precision_hist, self.dir_path, f"attacker_detection_precision_{self.cf['nb_rounds']}")
+        Utils.save_to_json(self.attacker_recall_hist, self.dir_path, f"attacker_detection_recall_{self.cf['nb_rounds']}")
         # Attacker profiles to json
         Utils.save_to_json(self.attacker_profiles_per_round, self.dir_path, f"attacker_profiles_{self.cf['nb_rounds']}")
         Utils.save_to_json(self.passing_attacker_profiles_per_round, self.dir_path, f"passing_attacker_profiles_{self.cf['nb_rounds']}")

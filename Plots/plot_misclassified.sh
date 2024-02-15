@@ -1,7 +1,7 @@
 #!/bin/bash
 
-algo_dir="FedCVAE"
-dataset="FashionMNIST"
+algo_dir="FedCAM2_128batch"
+dataset="MNIST"
 
 # In no attack scenario
 #python3 generate_samples.py -mode single \
@@ -12,11 +12,11 @@ dataset="FashionMNIST"
 
 # Compare attacks
 #for attack in AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor MajorityBackdoor TargetedBackdoor; do 
-for attack in AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor; do 
+for attack in SameValue SignFlip; do 
     python3 generate_samples.py -mode single \
      -baseline False \
      -experiment ../Results/$dataset/$algo_dir/non-IID_30_$attack \
-     -metric_list Attacker_detection_recall_100.json Attacker_detection_precision_100.json
+     -metric_list attacker_detection_recall_100.json attacker_detection_precision_100.json
     python3 plot_results_compare.py -mode detection -columns "Detection rate" "Precision" -figname "$attack""_$algo_dir""_detection.png" -figtitle "Detection performance for a 30% $attack scenario with $algo_dir"
 done
 

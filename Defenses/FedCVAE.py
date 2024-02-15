@@ -1,7 +1,7 @@
 import copy
 import os
 import numpy as np
-import tqdm
+from tqdm import tqdm
 import torch
 import torch.nn.functional as F
 
@@ -233,12 +233,15 @@ class Server:
         save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_clients_hist_{self.cf['nb_rounds']}.pdf"
         Utils.plot_hist(self.histo_selected_clients, x_info="Clients", y_info="Frequencies", title_info="", bins=1000,
                         save_path=save_path)
+        
+        # Save the training config 
+        Utils.save_to_json(self.cf, self.dir_path, "run_config.json")
 
         # Saving the percentage of attackers blocked
         Utils.save_to_json((total_attackers_passed/total_attackers)*100, self.dir_path, f"successful_attacks")
         # Detection qulity metrics to JSON
-        Utils.save_to_json(self.attacker_precision_hist, self.dir_path, f"Attacker_detection_precision_{self.cf['nb_rounds']}")
-        Utils.save_to_json(self.attacker_recall_hist, self.dir_path, f"Attacker_detection_recall_{self.cf['nb_rounds']}")
+        Utils.save_to_json(self.attacker_precision_hist, self.dir_path, f"attacker_detection_precision_{self.cf['nb_rounds']}")
+        Utils.save_to_json(self.attacker_recall_hist, self.dir_path, f"attacker_detection_recall_{self.cf['nb_rounds']}")
         # Attacker profiles to json
         Utils.save_to_json(self.attacker_profiles_per_round, self.dir_path, f"attacker_profiles_{self.cf['nb_rounds']}")
         Utils.save_to_json(self.passing_attacker_profiles_per_round, self.dir_path, f"passing_attacker_profiles_{self.cf['nb_rounds']}")
@@ -258,8 +261,8 @@ class Server:
             Utils.plot_accuracy(self.accuracy_backdoor, x_info='Round', y_info='backdoor Accuracy',
                                 title_info=title_info, save_path=save_path)
 
-        # Plotting the histogram of the defense system
-        Utils.plot_histogram(self.cf, self.nb_attackers_passed_defence_history, self.nb_attackers_history,
-                             self.nb_benign_passed_defence_history, self.nb_benign_history, self.config_FL,
-                             self.attack_type, self.defence, self.dir_path)
+        ## Plotting the histogram of the defense system
+        #Utils.plot_histogram(self.cf, self.nb_attackers_passed_defence_history, self.nb_attackers_history,
+        #                     self.nb_benign_passed_defence_history, self.nb_benign_history, self.config_FL,
+        #                     self.attack_type, self.defence, self.dir_path)
 

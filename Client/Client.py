@@ -40,6 +40,9 @@ class Client:
 
     def set_model(self, model):
         self.model = model.to(self.device)
+    
+    def remove_model(self):
+        self.model = None
 
     def set_data(self, data):
         self.dataloader = data

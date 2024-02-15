@@ -84,7 +84,7 @@ class Server:
         #    print(f"test data sample : {sample[0].size()}")
         #    print(f"test label sample : {sample[1].size()}, {sample[1]}")
         
-        self.clients = Utils.gen_clients(self.config_FL, self.attack_type, self.train_data, backdoor_label= cf["source"])
+        self.clients = Utils.gen_clients(self.config_FL, self.attack_type, self.train_data, backdoor_label= cf["source"])              
 
         self.are_attackers = np.array([int(client.is_attacker) for client in self.clients])
         self.are_benign = np.array([int(not(client.is_attacker)) for client in self.clients])
@@ -233,14 +233,10 @@ class Server:
             torch.cuda.empty_cache()
 
             selected_clients = Utils.select_clients(self.clients, self.config_FL["nb_clients_per_round"])
-
-            print("before copies")
-            print(torch.cuda.memory_summary())
+                                                    
             for client in tqdm(selected_clients):
                 client.set_model(deepcopy(self.global_model).to(self.device))
                 client.train(self.cf)
-            print("after copies")
-            print(torch.cuda.memory_summary())
 
             if self.defence:
                 clients_re = self.compute_reconstruction_error(selected_clients)
@@ -343,6 +339,9 @@ class Server:
         
         print(f"finished running server in {datetime.datetime.now() - t_start}")
 
+        # Save the training config 
+        Utils.save_to_json(self.cf, self.dir_path, "run_config.json")
+
         # Saving The accuracies of the Global model on the testing set and the backdoor set
         Utils.save_to_json(self.accuracy, self.dir_path, f"test_accuracy_{self.cf['nb_rounds']}")
         if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"]:
@@ -377,11 +376,11 @@ class Server:
             Utils.plot_accuracy(self.accuracy_backdoor, x_info='Round', y_info='backdoor Accuracy',
                                 title_info=title_info, save_path=save_path)
 
-        # Plotting the histogram of the defense system
-        Utils.plot_histogram(self.cf, self.nb_attackers_passed_defence_history, self.nb_attackers_history,
-                             self.nb_benign_passed_defence_history, self.nb_benign_history, self.config_FL,
-                             self.attack_type, self.defence, self.dir_path, success_rate=f"{(1-(total_attackers_passed/total_attackers))*100:.2f}%",
-                             attacker_ratio=self.attacker_ratio)
+        ## Plotting the histogram of the defense system
+        #Utils.plot_histogram(self.cf, self.nb_attackers_passed_defence_history, self.nb_attackers_history,
+        #                     self.nb_benign_passed_defence_history, self.nb_benign_history, self.config_FL,
+        #                     self.attack_type, self.defence, self.dir_path, success_rate=f"{(1-(total_attackers_passed/total_attackers))*100:.2f}%",
+        #                     attacker_ratio=self.attacker_ratio)
 
         # Print some stats 
         print(f"In total : Number of attackers : {total_attackers}, \

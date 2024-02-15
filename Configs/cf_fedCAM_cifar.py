@@ -14,7 +14,7 @@ configs_fedCAM = {
 
     #FL Settings
     "data_dist": "non-IID", # For the moment we are considering only the IID data distribution
-    "nb_rounds": 1,  # Maximum number of communication rounds for federated learning
+    "nb_rounds": 100,  # Maximum number of communication rounds for federated learning
     "aggregation": "FedAvg",  # Aggregation method for model updates
     #"num_clients": 3580-500-250,  # for FeMNIST
     "num_clients": 1000,  # Total number of clients in the federated learning system

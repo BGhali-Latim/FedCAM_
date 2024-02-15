@@ -7,7 +7,7 @@ configs_fedCAM = {
 
     # Clients Settings
     "num_epochs": 5,  # Number of epochs for training
-    "batch_size": 256,  # Batch size for training
+    "batch_size": 128,  # Batch size for training
     "lr": 5e-4,  # Learning rate
     "num_classes": 10,  # Number of classes in the dataset
     "wd": 1e-5,  # Weight decay for Clients model

@@ -7,7 +7,7 @@ from math import floor
 
 from tqdm import tqdm
 import h5py
-
+import seaborn as sns
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Subset, random_split
 from torchvision import datasets
@@ -35,7 +35,9 @@ class Utils:
             #transforms.RandomCrop(32, padding=4),
             #transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+                transforms.Normalize(
+                    (0.5,0.5,0.5), (0.5,0.5,0.5)),
         ])
             data = datasets.CIFAR10(root='./data', train=True, transform=trans_cifar_train, download=True)
         data_size = len(data) // num_clients
@@ -46,7 +48,10 @@ class Utils:
     @staticmethod
     def distribute_non_iid_data_among_clients(num_clients, batch_size, dataset):
         if dataset == "MNIST" :
-            train_data = datasets.MNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
+            train_data = datasets.MNIST(root='./data', train=True, transform=transforms.Compose([transforms.ToTensor(),
+                                                                                                 transforms.Normalize(
+                (0.286,), (0.3205,)),])                                        
+                , download=True)
             size_def = 2000
         elif dataset == "FashionMNIST" :
             train_data = datasets.FashionMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
@@ -88,7 +93,9 @@ class Utils:
             #transforms.RandomCrop(32, padding=4),
             #transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+                transforms.Normalize(
+                    (0.5,0.5,0.5), (0.5,0.5,0.5)),
         ])    
             train_data = datasets.CIFAR10(root='./data', train=True, transform=trans_cifar_train, download=True)
             train_data.targets = torch.tensor(train_data.targets)
@@ -103,26 +110,15 @@ class Utils:
         backdoor_sets = []
         tuples_set = []
 
-        #class_counts = [0 for i in range(10)]
-        #class_distrib = [0 for i in range(10)]
-        #sample_counts = 0s
         for k in tqdm(range(1,num_clients+1)):   
             sample_size = int(floor(size_def/(k+5)))+20
 
             while True :
                 i, j = random.sample(range(0, 10), k=2)
-                # print(i, '/', j)
-                # print(size)
-                # print(len(indices[i]), '/', len(indices[j]))
                 if (len(indices[i])+len(indices[j]))>=2*sample_size : 
                     break
 
-            #print(f"-----------\n step {k}")
-            #print(i, '/', j)
-            #print(len(indices[i]), '/', len(indices[j]))
             tuples_set.append([i, j])
-            # if ((i == 1) or (j == 1)) and (attack_type == 1):
-            #     backdoor_sets.append(k - 1)
 
             if len(indices[i])<sample_size :
                 indice_i = np.random.choice(range(len(indices[i])), size=len(indices[i]), replace=False)
@@ -172,6 +168,17 @@ class Utils:
         #print(sum([len(loader) for loader in subdatasets]))
         #print([len(loader) for loader in subdatasets])
         return subdatasets
+    
+    @staticmethod
+    def plot_data_dist(clients, savepath = ""):
+        sizes = sorted([len(client.dataloader.dataset) for client in clients])
+        sns.set_theme()
+        fig, ax = plt.subplots()
+        ax.hist(sizes[:-1], sizes)     
+        ax.set(xlabel="Number of samples",
+               ylabel="Number of clients", title="Client data distribution for MNIST")
+        ax.text(500, 200, f"total samples = {sum(sizes)}")
+        plt.show()
 
     @staticmethod
     def gen_database(num_clients, batch_size, dataset):

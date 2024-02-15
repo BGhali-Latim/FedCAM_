@@ -2,7 +2,7 @@
 # Language: Python
 
 configs_fedCAM2 = {
-    "dataset": "MNIST",
+    "dataset": "FashionMNIST",
     "nb_classes": 10,
 
     # Clients Settings

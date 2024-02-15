@@ -2,7 +2,7 @@
 # Language: Python
 
 configs_fedGuard = {
-    "dataset": "MNIST",
+    "dataset": "FashionMNIST",
     "nb_classes": 10,
 
     # Clients Settings

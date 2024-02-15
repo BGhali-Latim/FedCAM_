@@ -137,3 +137,42 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+    
+
+class CifarCNN2(nn.Module):
+    def __init__(self, input_channels=3, fc_input=1024):
+        super(CifarCNN2, self).__init__()
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=5)
+        self.fc1 = nn.Linear(fc_input, 256)
+        self.fc2 = nn.Linear(256, 10)
+
+    def forward(self, x):
+        x = x.view(-1, 3, 32, 32)
+        x = F.relu(self.conv1(x))
+        # x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv3(x), 2))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = torch.flatten(x, start_dim=1)
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
+        x = self.fc2(x)
+        return F.log_softmax(x, dim=1)
+
+    def get_activations(self, x):
+        x = x.view(-1, 3, 32, 32)
+        x = F.relu(self.conv1(x))
+        # x = F.dropout(x, p=0.5, training=self.training)
+        x = F.max_pool2d(self.conv2(x), 2)
+        return torch.flatten(x, start_dim=1)
+
+    # def get_activations_2(self, x):
+    #    x = F.relu(self.conv1(x))
+    #    #x = F.dropout(x, p=0.5, training=self.training)
+    #    x = F.relu(F.max_pool2d(self.conv2(x), 2))
+    #    x = F.dropout(x, p=0.5, training=self.training)
+    #    x = F.max_pool2d(self.conv3(x),2)
+    #    return x
