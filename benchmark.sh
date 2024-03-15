@@ -2,93 +2,66 @@
 
 echo "started script" >> testing.out
 
-## Get Baseline for FashionMNIST (with normalisation + 128)
-#for attack in NoAttack; do
-#    echo "running with 30% $attack attackers" 
-#    python3 TestMain.py -algo noDefense -attack $attack -ratio 0.3 -dataset FashionMNIST| tee Results/FashionMNIST_baseline_0.3_$attack.out
-#done
-#
-## Run fedGuard on FashionMNIST 
-#for attack in NoAttack AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor; do
-#    echo "running fedGuard with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedGuard -attack $attack -ratio 0.3 -dataset FashionMNIST| tee Results/fashion_fedcam_0.3_$attack.out
+dataset="MNIST" #non - iid
+
+#for algo in fedCAM2 fedCAM_cos fedCWR fedCVAE fedGuard; do 
+#    for attack in NoAttack AdditiveNoise SameValue SignFlip SourcelessBackdoor AlternatedBackdoor; do 
+
+#for algo in fedCAM_cos fedCWR; do 
+#    for attack in AdditiveNoise SameValue SignFlip SourcelessBackdoor AlternatedBackdoor; do 
+#        echo "running $algo non iid with 30% $attack attackers on $dataset" 
+#        python3 TestMain.py -algo $algo -attack $attack -ratio 0.3 -dataset $dataset| tee $algo.$dataset.$attack.out
+#    done
 #done
 
-# Run fedCAM on FashionMNIST (with no normalisation + 128)
-#for attack in SameValue ; do 
-#    echo "running fedCam2 with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedCam -attack $attack -ratio 0.3 -dataset MNIST| tee Results/fashion_fedcam_0.3_$attack.out
+for algo in fedCAM; do 
+#    for attack in NoAttack SignFlip SameValue AdditiveNoise; do 
+    for attack in SameValue SignFlip; do 
+        echo "running $algo non iid with 30% $attack attackers on $dataset" 
+        python3 TestMain.py -algo $algo -attack $attack -ratio 0.3 -dataset $dataset| tee $algo.$dataset.$attack.out
+    done
+done
+
+#for algo in noDefense; do 
+#    for attack in AlternatedBackdoor; do 
+#        echo "running $algo non iid with 30% $attack attackers on $dataset" 
+#        python3 TestMain.py -algo $algo -attack $attack -ratio 0.3 -dataset $dataset| tee $algo.$dataset.$attack.out
+#    done
 #done
 #
-## Run fedCAM on CIFAR10
-#for attack in NoAttack AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor; do
-#    echo "running fedCam with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedCam -attack $attack -ratio 0.3 -dataset CIFAR10| tee Results/cifar_fedcam_0.3_$attack.out
-#done
-#
-## Run fedCVAE on CIFAR10 #TOFIX, call right config
-#for attack in NoAttack AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor; do
-#    echo "running fedCVAE with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedCVAE -attack $attack -ratio 0.3 -dataset CIFAR10| tee Results/cifar_fedcvae_0.3_$attack.out
+#for algo in noDefense fedCAM; do 
+#    for attack in SourcelessBackdoor; do 
+#        echo "running $algo non iid with 30% $attack attackers on $dataset" 
+#        python3 TestMain.py -algo $algo -attack $attack -ratio 0.3 -dataset $dataset| tee $algo.$dataset.$attack.out
+#    done
 #done
 
-# Run fedCam for missing
-#for attack in AdditiveNoise; do 
-#    echo "running with 30% $attack attackers" 
-#    python3 TestMain.py -algo fedCam -attack $attack -ratio 0.3 | tee Results/fedCam_new_0.3_$attack.out 
+#for algo in fedCAM_cos fedCWR; do 
+#    for attack in NoAttack AdditiveNoise SameValue SignFlip SourcelessBackdoor AlternatedBackdoor; do 
+#        echo "running $algo non iid with 30% $attack attackers on $dataset" 
+#        python3 TestMain.py -algo $algo -attack $attack -ratio 0.3 -dataset $dataset| tee $algo.$dataset.$attack.out
+#    done
 #done
-#
-## Run fedGuard with GuardCNN for missing
-#for attack in AdditiveNoise; do 
-#    echo "running with 30% $attack attackers" 
-#    python3 TestMain.py -algo fedGuard -attack $attack -ratio 0.3 | tee Results/fedGuard_withGuardCNN_0.3_$attack.out 
+
+# Compare attacks
+#cd ./Plots 
+#for metric in test_accuracy; do 
+#    for attack in AdditiveNoise SignFlip SameValue; do 
+#        python3 generate_samples.py -mode several \
+#        -baseline False \
+#        -result_dir ../Results/all_in_act_3/MNIST/ \
+#        -experiment_list  "NoDefence/non-IID_30_NoAttack" "NoDefence/non-IID_30_$attack" "FedCAM/non-IID_30_$attack" \
+#        "FedCAM2/non-IID_30_$attack" "FedCVAE/non-IID_30_$attack" "FedGuard/non-IID_30_$attack" "FedCWR/non-IID_30_$attack"\
+#        -metric "$metric""_100.json"
+#        python3 plot_results_compare_smoothed.py \
+#        -columns "Baseline" "NoDefence" "FedCAM" "FedCAM2" "FedCVAE" "FedGuard" "FedCWR"\
+#        -figname "$attack""_$metric""0.3_all_comparison" \
+#        -figtitle "$metric comparison of algos in a $attack scenario"
+#    done
 #done
 
 echo "run next"
 
-# NEXT
-# RUn fedCam with 100 epochs (or fedCAM2 ???)
-#for attack in NoAttack AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor MajorityBackdoor TargetedBackdoor; do
-#    echo "running with 30% $attack attackers" 
-#    #python3 TestMain.py -algo noDefense -attack $attack -ratio 0.3 | tee Results/nodef_0.3_$attack.out 
-#    python3 TestMain.py -algo fedCam -attack $attack -ratio 0.3 | tee Results/fedcam_100_0.3_$attack.out
-#done
 
-#STORAGE
-#echo "running without attackers" 
-#python3 TestMain.py -algo fedCam -attack NoAttack -ratio 0 | tee Results/baseline.out
 
-# Run missing
-#for attack in SameValue ; do 
-#    echo "running fedCam2 with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedCam2 -attack $attack -ratio 0.3 -dataset FashionMNIST| tee Results/fashion_fedcam2_0.3_$attack.out
-#done
-#for attack in AdditiveNoise ; do 
-#    echo "running fedgUARD with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedGuard -attack $attack -ratio 0.3 -dataset FashionMNIST| tee Results/fashion_ffeguard_0.3_$attack.out
-#done
-#for attack in NoAttack AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor; do
-#    echo "running cos with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedCam_cos -attack $attack -ratio 0.3 -dataset MNIST| tee Results/fedcam_cos_iid_0.3_$attack.out
-#done
-#for attack in NoAttack AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor; do
-#    echo "running cos with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedCam_cos_non_iid -attack $attack -ratio 0.3 -dataset MNIST| tee Results/fedcam_cos_non_iid_0.3_$attack.out
-#done
-#for attack in SameValue; do
-#    echo "running cos with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedCam_cos_non_iid -attack $attack -ratio 0.3 -dataset FashionMNIST| tee Results/fedcam_cos_fashion_non_iid_0.3_$attack.out
-#done
-#for attack in AdditiveNoise SameValue SignFlip; do #For recall etc
-#    echo "running fedgUARD with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedGuard_1000 -attack $attack -ratio 0.3 -dataset MNIST| tee Results/mnist_guard10000.3_$attack.out
-#done
-#for attack in AdditiveNoise SameValue SignFlip NaiveBackdoor SquareBackdoor; do #For recall etc
-#    echo "running fedgUARD with 30% $attack attackers on $dataset" 
-#    python3 TestMain.py -algo fedGuard_1000 -attack $attack -ratio 0.3 -dataset FashionMNIST| tee Results/fashion_guard1000_0.3_$attack.out
-#done 
 
-for attack in SameValue SignFlip AdditiveNoise ; do #For recall etc
-    echo "running cos non iid with 30% $attack attackers on $dataset" 
-    python3 TestMain.py -algo fedCam_cos_non_iid -attack $attack -ratio 0.3 -dataset MNIST| tee Results/mnist_cosnoniidnew_$attack.out
-done
