@@ -18,17 +18,18 @@ import random
 
 
 class Server:
-    def __init__(self, cf=None, model=None, attack_type=None, attacker_ratio=None):
+    def __init__(self, cf=None, model=None, attack_type=None, attacker_ratio=None, dataset = None):
         super().__init__()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.cf = cf
+        self.dataset = dataset
 
         # Saving directory
         if not cf["with_defence"]:
-            self.dir_path = f"Results/{self.cf['dataset']}/NoDefence/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
+            self.dir_path = f"Results/{self.cf['experiment']}/{self.dataset}/NoDefence/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
         else :
-            self.dir_path = f"Results/{self.cf['dataset']}/FedCAM/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
+            self.dir_path = f"Results/{self.cf['experiment']}/{self.dataset}/FedCAM/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
 
         if os.path.exists(self.dir_path):
             shutil.rmtree(self.dir_path)
@@ -63,18 +64,18 @@ class Server:
 
         print("distributing data among clients")
         if self.cf['data_dist'] == "IID" :
-            self.train_data = Utils.distribute_non_iid_data_among_clients(self.config_FL["num_clients"], cf["batch_size"], dataset=cf["dataset"])
+            self.train_data = Utils.distribute_non_iid_data_among_clients(self.config_FL["num_clients"], cf["batch_size"], dataset=self.dataset)
         elif self.cf['data_dist'] == "non-IID" :
-            self.train_data = Utils.distribute_non_iid_data_among_clients(self.config_FL["num_clients"], cf["batch_size"], dataset=cf["dataset"])
+            self.train_data = Utils.distribute_non_iid_data_among_clients(self.config_FL["num_clients"], cf["batch_size"], dataset=self.dataset)
         print("generating clients")
 
-        if self.cf["dataset"] == "FEMNIST" :
+        if self.dataset == "FEMNIST" :
             print("splitting train into trigger and test")
             self.train_data, self.trigger_loader, self.test_loader = Utils.split_train(
                 self.train_data, cf["size_trigger"], cf["size_test"])
         else : 
             print("getting test data")
-            self.trigger_loader, self.test_loader = Utils.get_test_data(cf["size_trigger"], cf["dataset"])
+            self.trigger_loader, self.test_loader = Utils.get_test_data(cf["size_trigger"], self.dataset)
         
         #for sample in self.trigger_loader :
         #    print(f"trigger data sample : {sample[0].size()}")
@@ -148,7 +149,7 @@ class Server:
 
         gm = compute_geometric_median(input_models_act.cpu(), weights=None)
         input_models_act = input_models_act - gm.median.to(self.device)
-        input_models_act = torch.sigmoid(input_models_act).detach()
+        input_models_act = F.sigmoid(input_models_act.detach())
 
         num_epochs = self.config_cvae["cvae_nb_ep"]
         optimizer = torch.optim.Adam(self.cvae.parameters(), lr=self.config_cvae["cvae_lr"],
@@ -162,6 +163,7 @@ class Server:
             for batch_idx, activation in enumerate(loop):
 
                 condition = Utils.one_hot_encoding(labels_act, self.num_classes, self.device)
+                #condition =  torch.zeros(size=(self.cf["size_trigger"], self.num_classes)).to(self.device)
                 recon_batch, mu, logvar = self.cvae(activation, condition)
                 loss = Utils.cvae_loss(recon_batch, activation, mu, logvar)
 
@@ -184,6 +186,52 @@ class Server:
         clients_act = torch.zeros(size=(len(selected_clients), self.cf["size_trigger"], self.activation_size)).to(self.device)
         labels_cat = torch.tensor([]).to(self.device)
 
+        # Examine global model : 
+        with open(os.path.join(self.dir_path,"model_params.txt"),"a+") as f :
+            f.write("---------\nnew epoch\n")
+            for name, param in self.global_model.named_parameters():
+                if param.requires_grad:
+                    f.write(f"{name}, {param.data}\n")
+
+        # Examine activations : 
+        with open(os.path.join(self.dir_path,"client_activations.txt"),"a+") as f :
+            # global model 
+            #for data, label in self.trigger_loader:
+            #    data, label = data.to(self.device), label.to(self.device)
+            #    activation1 = self.global_model.get_activations_1(data) 
+            #    activation2 = self.global_model.get_activations_2(data) 
+            #    activation3 = self.global_model.get_activations_3(data) 
+            #    activation4 = self.global_model.get_activations_4(data)
+            #    f.write(f"global model activations\
+            #          \n Activations 1 : max : {activation1.max()}, min : {activation1.min()}, avg {activation1.mean()}\
+            #          \n Activations 2 : max : {activation2.max()}, min : {activation2.min()}, avg {activation2.mean()}\
+            #          \n Activations 3 : max : {activation3.max()}, min : {activation3.min()}, avg {activation3.mean()}\
+            #          \n Activations 4 : max : {activation4.max()}, min : {activation4.min()}, avg {activation4.mean()}\
+            #          \n-------------\n")
+            #    break
+            ## clients
+            for client_nb, client_model in enumerate(selected_clients):
+                labels_cat = torch.tensor([]).to(self.device)
+                for data, label in self.trigger_loader:
+                    data, label = data.to(self.device), label.to(self.device)
+                    activation1 = client_model.model.get_activations(data[label ==1]) 
+                    f.write(f" \n\n\n\n new epoch \
+                    Client nb : {client_nb}\
+                    \n Attacker : {client_model.is_attacker}\
+                    \n Activations 4 : max : {activation1.max()}, min : {activation1.min()}, avg {activation1.mean()}\n------------\n")
+            #        activation1 = client_model.model.get_activations_1(data) 
+            #        activation2 = client_model.model.get_activations_2(data) 
+            #        activation3 = client_model.model.get_activations_3(data) 
+            #        activation4 = client_model.model.get_activations_4(data)
+            #        f.write(f"Client nb : {client_nb}\
+            #              \n Attacker : {client_model.is_attacker}\
+            #              \n Activations 1 : max : {activation1.max()}, min : {activation1.min()}, avg {activation1.mean()}\
+            #              \n Activations 2 : max : {activation2.max()}, min : {activation2.min()}, avg {activation2.mean()}\
+            #              \n Activations 3 : max : {activation3.max()}, min : {activation3.min()}, avg {activation3.mean()}\
+            #              \n Activations 4 : max : {activation4.max()}, min : {activation4.min()}, avg {activation4.mean()}\
+            #              \n-------------\n")
+            #        break
+
         for client_nb, client_model in enumerate(selected_clients):
             labels_cat = torch.tensor([]).to(self.device)
             for data, label in self.trigger_loader:
@@ -202,11 +250,17 @@ class Server:
         #    return clients_re
 
         clients_act = clients_act - gm.median.to(self.device)
+        print(f" geomed : {gm.median}, max : {gm.median.max()}, min : {gm.median.min()}, avg {gm.median.mean()}\n------------\n")
+        with open(os.path.join(self.dir_path,"geomed_evolution.txt"),"a+") as f :
+            f.write(f"\n---------\n geomed : {gm.median}, max : {gm.median.max()}, min : {gm.median.min()}, avg {gm.median.mean()}\n------------\n")
+            for client,act in zip(selected_clients, clients_act): 
+                f.write(f"{client.is_attacker} : normed acts : max : {act.max()}, min : {act.min()}, avg {act.mean()}\n")
         # clients_act = torch.abs(clients_act)
-        clients_act = torch.sigmoid(clients_act)
+        clients_act = F.sigmoid(clients_act)
 
         for client_act in clients_act:
             condition = Utils.one_hot_encoding(labels_cat, self.num_classes, self.device).to(self.device)
+            #condition = torch.zeros(size=(self.cf["size_trigger"], self.num_classes)).to(self.device)
             recon_batch, _, _ = self.cvae(client_act, condition)
             mse = F.mse_loss(recon_batch, client_act, reduction='mean').item()
             clients_re.append(mse)
@@ -255,6 +309,36 @@ class Server:
                     client.suspect()
             else:
                 good_updates = selected_clients
+            
+            # Inspect selected clients 
+            selected_re = clients_re_without_nan[clients_re_without_nan < mean_of_re]
+            selected_clients_info = selected_clients_array[clients_re_without_nan < mean_of_re]
+            selected_statuses = ["Attacker" if client.is_attacker else "Benign" for client in selected_clients_info]
+            selecteds = [(client, err) for client, err in zip(selected_statuses,selected_re)]
+            #sorted_selected_statuses = ["Attacker" if client.is_attacker else "Benign"
+            #                            for _,client in sorted(zip(selected_re, selected_clients_info))]
+            blocked_re = clients_re_without_nan[clients_re_without_nan >= mean_of_re]
+            blocked_clients_info = selected_clients_array[clients_re_without_nan >= mean_of_re]
+            blocked_statuses = ["Attacker" if client.is_attacker else "Benign" for client in blocked_clients_info]
+            #sorted_blocked_statuses = ["Attacker" if client.is_attacker else "Benign"
+            #                           for _,client in sorted(zip(blocked_re, blocked_clients_info))]
+            blockeds = [(client, err) for client, err in zip(blocked_statuses,blocked_re)]
+            with open(os.path.join(self.dir_path,"filtering.txt"),"a+") as f :
+                f.write(f"\n\n\n\n\
+                round {rounds} \n \
+                \nmean of re : {mean_of_re}\
+                \n------------------ \
+                \n selecteds : {selecteds} \
+                \n blocked : {blockeds}")
+                #\nselected_client_errors : {selected_re}\
+                #\nselected_clients_status : {selected_statuses}\
+                #\n------------------ \
+                #\nblocked_client_errors : {blocked_re}\
+                #\nblocked_clients_status : {blocked_statuses}")
+                #\nselected_client_errors : {sorted(selected_re)}\
+                #\nselected_clients_status : {sorted_selected_statuses}\
+                #\nblocked_client_errors : {sorted(blocked_re)}\
+                #\nblocked_clients_status : {sorted_blocked_statuses}")
 
             self.histo_selected_clients = torch.cat((self.histo_selected_clients,
                                                      torch.tensor([client.id for client in good_updates])))
@@ -289,9 +373,15 @@ class Server:
                 self.accuracy_backdoor.append(Utils.test_backdoor(self.global_model, self.device, self.test_loader,
                                                                   self.attack_type, self.cf["source"],
                                                                   self.cf["target"], self.cf["square_size"]))
+                
+            if self.attack_type in ["SourcelessBackdoor", "DistBackdoor", "AlternatedBackdoor"] :
+                self.accuracy_backdoor.append(Utils.test_sourceless_backdoor(self.global_model, self.device, self.test_loader,
+                                                  self.attack_type,
+                                                  self.cf["target"], self.cf["square_size"]))
 
             print(f"Round {rounds + 1}/{self.cf['nb_rounds']} server test accuracy: {self.accuracy[-1] * 100:.2f}%")
-            if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"] :
+            if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", 
+                                    "TargetedBackdoor", "SourcelessBackdoor", "DistBackdoor", "AlternatedBackdoor"] :
                 print(f"Round {rounds + 1}/{self.cf['nb_rounds']} attacker accuracy: {self.accuracy_backdoor[-1] * 100:.2f}%")
             
             # Clean up after update step (to save GPU memory)
@@ -344,13 +434,14 @@ class Server:
 
         # Saving The accuracies of the Global model on the testing set and the backdoor set
         Utils.save_to_json(self.accuracy, self.dir_path, f"test_accuracy_{self.cf['nb_rounds']}")
-        if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"]:
+        if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", 
+                                "TargetedBackdoor", "SourcelessBackdoor", "DistBackdoor", "AlternatedBackdoor"]:
             Utils.save_to_json(self.accuracy_backdoor, self.dir_path,
                                f"{self.attack_type}_accuracy_{self.cf['nb_rounds']}")
 
-        save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_clients_hist_{self.cf['nb_rounds']}.pdf"
-        Utils.plot_hist(self.histo_selected_clients, x_info="Clients", y_info="Frequencies", title_info="", bins=1000,
-                        save_path=save_path)
+        #save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_clients_hist_{self.cf['nb_rounds']}.png"
+        #Utils.plot_hist(self.histo_selected_clients, x_info="Clients", y_info="Frequencies", title_info="", bins=1000,
+        #                save_path=save_path)
         
         # Saving the percentage of attackers blocked
         Utils.save_to_json((total_attackers_passed/total_attackers)*100, self.dir_path, f"successful_attacks")
@@ -365,22 +456,29 @@ class Server:
 
         # Plotting the testing accuracy of the global model
         title_info = f"Test Accuracy per Round for {self.attacker_ratio * 100}% of {self.attack_type} with {('Defence' if self.defence else 'No Defence')}"
-        save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_Test_Accuracy_{self.cf['nb_rounds']}.pdf"
+        save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_Test_Accuracy_{self.cf['nb_rounds']}.png"
         Utils.plot_accuracy(self.accuracy, x_info='Round', y_info='Test Accuracy', title_info=title_info,
                             save_path=save_path)
 
-        if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"]:
+        if self.attack_type in ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", 
+                                "TargetedBackdoor", "SourcelessBackdoor", "DistBackdoor", "AlternatedBackdoor"]:
             # Plotting the backdoor accuracy
             title_info = f"Backdoor Accuracy per Round for {self.attacker_ratio * 100}% of {self.attack_type} with {('Defence' if self.defence else 'No Defence')}"
-            save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_Backdoor_Accuracy_{self.cf['nb_rounds']}.pdf"
+            save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_Backdoor_Accuracy_{self.cf['nb_rounds']}.png"
             Utils.plot_accuracy(self.accuracy_backdoor, x_info='Round', y_info='backdoor Accuracy',
                                 title_info=title_info, save_path=save_path)
+        
+        # Plot detection metrics
+        title_info = f"Attacker detection recall and precision for {self.attacker_ratio * 100}% of {self.attack_type} with {('Defence' if self.defence else 'No Defence')}"
+        save_path = f"{self.dir_path}/{self.attack_type}_{'With defence' if self.defence else 'No defence'}_detection_{self.cf['nb_rounds']}.png"
+        Utils.plot_prec_recall(self.attacker_recall_hist, self.attacker_precision_hist, self.nb_rounds, title_info = title_info,
+                               save_path = save_path)
 
         ## Plotting the histogram of the defense system
-        #Utils.plot_histogram(self.cf, self.nb_attackers_passed_defence_history, self.nb_attackers_history,
-        #                     self.nb_benign_passed_defence_history, self.nb_benign_history, self.config_FL,
-        #                     self.attack_type, self.defence, self.dir_path, success_rate=f"{(1-(total_attackers_passed/total_attackers))*100:.2f}%",
-        #                     attacker_ratio=self.attacker_ratio)
+        Utils.plot_histogram(self.cf, self.nb_attackers_passed_defence_history, self.nb_attackers_history,
+                             self.nb_benign_passed_defence_history, self.nb_benign_history, self.config_FL,
+                             self.attack_type, self.defence, self.dir_path, success_rate=f"{(1-(total_attackers_passed/total_attackers))*100:.2f}%",
+                             attacker_ratio=self.attacker_ratio)
 
         # Print some stats 
         print(f"In total : Number of attackers : {total_attackers}, \

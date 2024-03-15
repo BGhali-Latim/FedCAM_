@@ -53,7 +53,8 @@ class Client:
         if self.model is None:
             raise ValueError("The model is not set. Use set_model method to set the model.")
 
-        if self.is_attacker and self.attack_type not in ["NoAttack", "NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", "TargetedBackdoor"]:
+        if self.is_attacker and self.attack_type not in ["NoAttack", "NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "AlternatedBackdoor",
+                                                         "MajorityBackdoor", "TargetedBackdoor", "SourcelessBackdoor", "DistBackdoor"]:
             self.apply_attack()
             return self.model
 
@@ -68,10 +69,17 @@ class Client:
 
                 if self.is_attacker and self.attack_type == "NaiveBackdoor":
                     labels[labels == hp["source"]] = hp["target"]
+                if self.is_attacker and self.attack_type == "SourcelessBackdoor":
+                    data, labels = sourceless_square_backdoor(data, labels, hp["target"], hp["square_size"])
+                if self.is_attacker and self.attack_type == "AlternatedBackdoor":
+                    if epoch%3 == 0 :
+                        data, labels = sourceless_square_backdoor(data, labels, hp["target"], hp["square_size"])
                 if self.is_attacker and self.attack_type in ["MajorityBackdoor", "TargetedBackdoor","SquareBackdoor"]:
                     data, labels = square_backdoor(data, labels, hp["source"], hp["target"], hp["square_size"])
                 if self.is_attacker and self.attack_type == "NoiseBackdoor":
                     data, labels = noise_backdoor(data, labels, hp["source"], hp["target"], hp["back_noise_avg"], hp["back_noise_std"])
+                if self.is_attacker and self.attack_type == "DistBackdoor":
+                    data, labels = distributed_square_backdoor(data, labels, hp["target"], hp["square_size"], self.id%4)
 
 
                 outputs = self.model(data)
@@ -163,7 +171,7 @@ def square_backdoor(data, labels, source, target, square_size):
     #print(data[labels==source].size())
     #data[labels == source][:, 0, :square_size, :square_size] = 1.0
     if data[labels == source].size(0) !=0 : # Condition for non iid where there can be no corresponding label
-        data[labels == source][0, :square_size, :square_size] = 1.0
+        data[labels == source][:, :square_size, :square_size] = 1.0
     labels[labels == source] = target
     return data, labels
 
@@ -173,4 +181,31 @@ def noise_backdoor(data, labels, source, target, mean, std):
     labels = labels.clone()
     data[labels == source] += torch.normal(mean=mean, std=std, size=data[labels == source].size(), device= data.device)
     labels[labels == source] = target
+    return data, labels
+
+def sourceless_square_backdoor(data, labels, target, square_size):
+    # Create a white square
+    data = data.clone()
+    labels = labels.clone()
+    #print(data[labels==source].size())
+    #data[labels == source][:, 0, :square_size, :square_size] = 1.0
+    data[:, :square_size, :square_size] = 1.0
+    labels[:] = target
+    return data, labels
+
+def distributed_square_backdoor(data, labels, target, square_size, loc):
+    # Create a white square
+    data = data.clone()
+    labels = labels.clone()
+    #print(data[labels==source].size())
+    #data[labels == source][:, 0, :square_size, :square_size] = 1.0
+    if loc==0 :
+        data[:, :square_size//2, :square_size//2] = 1.0
+    elif loc==1 : 
+        data[:, square_size//2:2*(square_size//2), :square_size//2] = 1.0
+    elif loc==2 : 
+        data[:, :square_size//2, square_size//2:2*(square_size//2)] = 1.0
+    elif loc==3 : 
+        data[:, square_size//2:2*(square_size//2), square_size//2:2*(square_size//2)] = 1.0
+    labels[:] = target
     return data, labels

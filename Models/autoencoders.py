@@ -17,7 +17,7 @@ class CVAE(nn.Module):
 
         self.encoder = nn.Sequential(
             self.encoder_input,
-            nn.Sigmoid(),
+            nn.Tanh(),
             self.fc_mu_logvar,
         ).to(self.device)
 
@@ -27,9 +27,9 @@ class CVAE(nn.Module):
 
         self.decoder = nn.Sequential(
             self.decoder_input,
-            nn.Sigmoid(),
+            nn.Tanh(),
             self.decoder_output,
-            nn.Sigmoid()
+            #nn.Sigmoid()
         ).to(self.device)
 
     def encode(self, x, c):

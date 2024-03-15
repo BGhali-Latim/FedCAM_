@@ -4,6 +4,7 @@ import numpy as np
 import random
 import torch
 from math import floor
+from statistics import mean
 
 from tqdm import tqdm
 import h5py
@@ -18,7 +19,7 @@ import torchvision.transforms.functional as TF
 
 from Client.Client import Client
 from custom_datasets.Datasets import SyntheticLabeledDataset
-from custom_datasets.FEMNIST_pytorch import femnist
+#from custom_datasets.FEMNIST_pytorch import femnist
 
 class Utils:
     def __init__(self):
@@ -28,6 +29,7 @@ class Utils:
     def distribute_iid_data_among_clients(num_clients, batch_size, dataset):
         if dataset == "MNIST" :
             data = datasets.MNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
+            print('ok')
         elif dataset == "FashionMNIST" :
             data = datasets.FashionMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
         elif dataset == "CIFAR10" : 
@@ -47,15 +49,31 @@ class Utils:
     
     @staticmethod
     def distribute_non_iid_data_among_clients(num_clients, batch_size, dataset):
+
+        size_def_dict = { 'MNIST' : {100 : 9400, 1000 : 2000,},
+                        "FashionMNIST" : {100 : 9400, 1000 : 2000,},
+                        "CIFAR10" : {1000 : 1040},
+                        }
+
         if dataset == "MNIST" :
-            train_data = datasets.MNIST(root='./data', train=True, transform=transforms.Compose([transforms.ToTensor(),
-                                                                                                 transforms.Normalize(
-                (0.286,), (0.3205,)),])                                        
+            train_data = datasets.MNIST(root='./data', train=True, transform=transforms.Compose([transforms.ToTensor()])                                        
                 , download=True)
-            size_def = 2000
+
         elif dataset == "FashionMNIST" :
             train_data = datasets.FashionMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
-            size_def = 2000
+
+        elif dataset == "CIFAR10" : 
+            trans_cifar_train = transforms.Compose([
+            #transforms.RandomCrop(32, padding=4),
+            #transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+                transforms.Normalize(
+                    (0.5,0.5,0.5), (0.5,0.5,0.5)),])    
+            train_data = datasets.CIFAR10(root='./data', train=True, transform=trans_cifar_train, download=True)
+            train_data.targets = torch.tensor(train_data.targets)
+            train_data.data = torch.tensor(train_data.data)
+
         elif dataset == "FEMNIST": 
             #train_data = femnist.FEMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
             #data_size = len(train_data) // num_clients
@@ -88,19 +106,6 @@ class Utils:
                     pin_memory=True,
                 ))
             return subdatasets
-        elif dataset == "CIFAR10" : 
-            trans_cifar_train = transforms.Compose([
-            #transforms.RandomCrop(32, padding=4),
-            #transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-                transforms.Normalize(
-                    (0.5,0.5,0.5), (0.5,0.5,0.5)),
-        ])    
-            train_data = datasets.CIFAR10(root='./data', train=True, transform=trans_cifar_train, download=True)
-            train_data.targets = torch.tensor(train_data.targets)
-            train_data.data = torch.tensor(train_data.data)
-            size_def = 1040
 
         indices = [torch.where(train_data.targets == idx)[0] for idx in range(0, 10)]
         #print(len(indices))
@@ -109,6 +114,8 @@ class Utils:
         subdatasets = []
         backdoor_sets = []
         tuples_set = []
+
+        size_def = size_def_dict[dataset][num_clients]
 
         for k in tqdm(range(1,num_clients+1)):   
             sample_size = int(floor(size_def/(k+5)))+20
@@ -165,8 +172,8 @@ class Utils:
                 num_workers=4,
                 pin_memory=True,
             ))
-        #print(sum([len(loader) for loader in subdatasets]))
-        #print([len(loader) for loader in subdatasets])
+        print(sum([len(loader.dataset) for loader in subdatasets]))
+        print([len(loader.dataset) for loader in subdatasets])
         return subdatasets
     
     @staticmethod
@@ -218,21 +225,46 @@ class Utils:
 
     @staticmethod
     def plot_accuracy(accuracy, x_info="round", y_info="Test Accuracy", title_info= "provide a title", save_path=None):
-        plt.plot(range(1, len(accuracy) + 1), accuracy)
-        plt.xlabel(x_info)
-        plt.ylabel(y_info)
-        plt.title(title_info)
+        sns.set_theme()
+        fig, ax = plt.subplots()
+        sns.set(rc={'figure.figsize':(11,9)})
+        ax.plot(range(1, len(accuracy) + 1), accuracy)
+        ax.set_ylim([0,1.1])
+        ax.set_xlabel(x_info)
+        ax.set_ylabel(y_info)
+        ax.set_title(title_info)
+        ax.text(60, 0.1, f"best test accuracy : {max(accuracy)*100:.2f}%\
+         \nAchieved on round {np.argmax(np.array(accuracy))+1}")
         plt.savefig(save_path)
         #plt.show()
 
     @staticmethod
     def plot_hist(data, x_info="Values", y_info="Frequencies", title_info= "provide a title", bins=1000, save_path=None):
-        plt.title(title_info)
-        plt.xlabel(x_info)
-        plt.ylabel(y_info)
-        plt.hist(data, bins=bins)
+        sns.set_theme()
+        fig, ax = plt.subplots()
+        sns.set(rc={'figure.figsize':(11,9)})
+        ax.set_title(title_info)
+        ax.set_xlabel(x_info)
+        ax.set_ylabel(y_info)
+        ax.hist(data, bins=bins)
         plt.savefig(save_path)
         #plt.show()
+    
+    @staticmethod
+    def plot_prec_recall(recall_info = [], precision_info = [], rounds = None, title_info = None, save_path = None): 
+        sns.set_theme()        
+        sns.set(rc={'figure.figsize':(11,9)})
+        fig, ax = plt.subplots()
+        ax.plot(range(rounds), recall_info, color = 'black', label = "recall")
+        ax.plot(range(rounds), precision_info, color = 'r', label = "precision")
+        ax.legend()
+        ax.set(title=title_info, xlabel="Rounds")
+        ax.set_ylim([0,1.1])
+        ax.set_xlim([0,rounds])
+        ax.axhline(y = 0.5, linestyle = '--', color='black')
+        ax.text(-10, 0.5, "y = 0.5")
+        ax.text(60, 0.25, f"Average precision : {mean(precision_info)}")
+        plt.savefig(save_path)
 
 
     @staticmethod
@@ -247,26 +279,28 @@ class Utils:
         height_benign_passed_defense = np.array(nb_benign_passed_defence_history)
         height_remaining_benign = np.array(nb_benign_history) - height_benign_passed_defense
 
-        plt.bar(rounds, height_attackers_passed_defense, color='red', edgecolor='black', alpha=0.5,
+        fig, ax = plt.subplots()
+
+        ax.bar(rounds, height_attackers_passed_defense, color='red', edgecolor='black', alpha=0.5,
                 label='Attackers Passed Defence')
-        plt.bar(rounds, height_remaining_attackers, bottom=height_attackers_passed_defense, color='yellow',
+        ax.bar(rounds, height_remaining_attackers, bottom=height_attackers_passed_defense, color='yellow',
                 edgecolor='black', alpha=0.6, label='Total Attackers')
 
-        plt.bar(rounds, height_benign_passed_defense, bottom=height_attackers_passed_defense + height_remaining_attackers, color='blue', edgecolor='black', alpha=0.5,
+        ax.bar(rounds, height_benign_passed_defense, bottom=height_attackers_passed_defense + height_remaining_attackers, color='blue', edgecolor='black', alpha=0.5,
                 label='Benign Clients Passed Defence')
 
-        plt.bar(rounds, height_remaining_benign, bottom=height_benign_passed_defense + height_attackers_passed_defense + height_remaining_attackers, color='black',
+        ax.bar(rounds, height_remaining_benign, bottom=height_benign_passed_defense + height_attackers_passed_defense + height_remaining_attackers, color='black',
                 edgecolor='black', alpha=0.6, label='Total Benign Clients')
 
-        plt.xlabel('Number of Rounds')
-        plt.ylabel('Total Nb of Clients')
-        plt.ylim(0, config_fl["nb_clients_per_round"])
-        plt.title(f"Histogram for {attacker_ratio * 100}% of {attack_type} "
+        ax.set_xlabel('Number of Rounds')
+        ax.set_ylabel('Total Nb of Clients')
+        ax.set_ylim(0, config_fl["nb_clients_per_round"])
+        ax.set_title(f"Histogram for {attacker_ratio * 100}% of {attack_type} "
                   f"with {'Defence' if defence else 'No Defence'}")
 
-        plt.legend()
-        plt.text(1,45,f"Blocked {success_rate} of attacks", color = 'w', weight = "bold")
-        plt.savefig(f"{dir_path}/{attack_type}_{'With defence' if defence else 'No defence'}_Histogram_{hp['nb_rounds']}.pdf")
+        ax.legend()
+        ax.text(1,45,f"Blocked {success_rate} of attacks", color = 'w', weight = "bold")
+        plt.savefig(f"{dir_path}/{attack_type}_{'With defence' if defence else 'No defence'}_Histogram_{hp['nb_rounds']}.png")
 
         #plt.show()
 
@@ -336,6 +370,28 @@ class Utils:
                     misclassified_as_target += (predicted == target).sum().item()
 
         effectiveness = misclassified_as_target / total_source_labels if total_source_labels > 0 else 0
+        return effectiveness
+    
+    @staticmethod
+    def test_sourceless_backdoor(global_model, device, test_loader, attack_type, target, square_size):
+        global_model.to(device).eval()
+        total_labels, misclassified_as_target = 0, 0
+        with torch.no_grad():
+            for data, labels in test_loader:
+                data, labels = data.to(device), labels.to(device)
+
+                tmp_data = data.clone()
+                tmp_labels = labels.clone()
+
+                if len(tmp_data) != 0 :
+                    tmp_data[:, :square_size, :square_size] = 1.0
+
+                    outputs = global_model(tmp_data)
+                    _, predicted = torch.max(outputs, 1)
+                    
+                    total_labels += tmp_labels.size(0)
+                    misclassified_as_target += (predicted == target).sum().item()
+        effectiveness = misclassified_as_target / total_labels if total_labels > 0 else 0
         return effectiveness
 
     @staticmethod
@@ -440,6 +496,12 @@ class Utils:
         label = label.to(device)
         one_hot = torch.eye(num_classes).to(device)[label]
         return one_hot.squeeze(1).to(device)
+    
+    @staticmethod 
+    def is_backdoor(attack_name): 
+        backdoors_list = ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", 
+         "TargetedBackdoor", "SourcelessBackdoor", "DistBackdoor", "AlternatedBackdoor"]
+        return attack_name in backdoors_list
 
     # ****** Functions related to FedCVAE
 
