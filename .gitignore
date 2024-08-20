@@ -12,6 +12,6 @@ Plots/output/
 Plots/plotted/ 
 plots/ROC/ 
 __pycache__
-.idea 
+.idea/
 py3.8env 
 runs/
