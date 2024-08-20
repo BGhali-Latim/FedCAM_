@@ -7,19 +7,19 @@ from math import floor
 from statistics import mean
 
 from tqdm import tqdm
-import h5py
 import seaborn as sns
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Subset, random_split
 from torchvision import datasets
 from torchvision.transforms import transforms
 import torch.nn.functional as F
+import gc
 
 import torchvision.transforms.functional as TF
 
 from Client.Client import Client
 from custom_datasets.Datasets import SyntheticLabeledDataset
-#from custom_datasets.FEMNIST_pytorch import femnist
+from custom_datasets import FEMNIST_pytorch 
 
 class Utils:
     def __init__(self):
@@ -56,11 +56,19 @@ class Utils:
                         }
 
         if dataset == "MNIST" :
-            train_data = datasets.MNIST(root='./data', train=True, transform=transforms.Compose([transforms.ToTensor()])                                        
+            trans_mnist_train = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.1307,), (0.3081,))
+                    ])
+            train_data = datasets.MNIST(root='./data', train=True, transform=trans_mnist_train                                        
                 , download=True)
 
         elif dataset == "FashionMNIST" :
-            train_data = datasets.FashionMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
+            trans_fashionmnist_train = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.2860,), (0.3530,))
+                    ])
+            train_data = datasets.FashionMNIST(root='./data', train=True, transform=trans_fashionmnist_train, download=True)
 
         elif dataset == "CIFAR10" : 
             trans_cifar_train = transforms.Compose([
@@ -75,6 +83,7 @@ class Utils:
             train_data.data = torch.tensor(train_data.data)
 
         elif dataset == "FEMNIST": 
+            import h5py
             #train_data = femnist.FEMNIST(root='./data', train=True, transform=transforms.ToTensor(), download=True)
             #data_size = len(train_data) // num_clients
             #return [
@@ -173,6 +182,7 @@ class Utils:
                 pin_memory=True,
             ))
         print(sum([len(loader.dataset) for loader in subdatasets]))
+        # Utils.plot_hist([len(loader.dataset) for loader in subdatasets], bins=50, title_info="Data distribution in non-iid setting", x_info="client dataset size", y_info="number of clients", save_path="./hist.pdf")
         print([len(loader.dataset) for loader in subdatasets])
         return subdatasets
     
@@ -192,9 +202,9 @@ class Utils:
         return Utils.distribute_iid_data_among_clients(num_clients, batch_size, dataset)
 
     @staticmethod
-    def gen_clients(config_fl, attack_type, train_data, backdoor_label = '0'):
-        total_clients = config_fl["num_clients"]
-        num_attackers = int(total_clients * config_fl["attackers_ratio"])
+    def gen_clients(num_clients, attacker_ratio, attack_type, train_data, backdoor_label = '0'):
+        total_clients = num_clients
+        num_attackers = int(total_clients * attacker_ratio)
 
         if attack_type == "MajorityBackdoor" : # Clients are already ordered by data size in non-IID
             attacker_flags = [True] * num_attackers + [False] * (total_clients - num_attackers)
@@ -220,8 +230,8 @@ class Utils:
         mse = F.mse_loss(recon_x, x, reduction='mean')
         # MSE = F.binary_cross_entropy(recon_x, x, reduction='mean')
         kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return mse + kld
-
+        # print(f"cvae loss : mse : {mse} kld : {kld}")
+        return mse, kld
 
     @staticmethod
     def plot_accuracy(accuracy, x_info="round", y_info="Test Accuracy", title_info= "provide a title", save_path=None):
@@ -251,21 +261,20 @@ class Utils:
         #plt.show()
     
     @staticmethod
-    def plot_prec_recall(recall_info = [], precision_info = [], rounds = None, title_info = None, save_path = None): 
+    def plot_recall(attacker_info = [], benign_info = [], rounds = None, title_info = None, save_path = None): 
         sns.set_theme()        
         sns.set(rc={'figure.figsize':(11,9)})
         fig, ax = plt.subplots()
-        ax.plot(range(rounds), recall_info, color = 'black', label = "recall")
-        ax.plot(range(rounds), precision_info, color = 'r', label = "precision")
+        ax.plot(range(rounds), attacker_info, color = 'black', label = "Attackers blocked")
+        ax.plot(range(rounds), benign_info, color = 'r', label = "Benign clients passed")
         ax.legend()
         ax.set(title=title_info, xlabel="Rounds")
         ax.set_ylim([0,1.1])
         ax.set_xlim([0,rounds])
         ax.axhline(y = 0.5, linestyle = '--', color='black')
         ax.text(-10, 0.5, "y = 0.5")
-        ax.text(60, 0.25, f"Average precision : {mean(precision_info)}")
+        #ax.text(60, 0.25, f"{mean(precision_info)}")
         plt.savefig(save_path)
-
 
     @staticmethod
     def plot_histogram(hp, nb_attackers_passed_defence_history, nb_attackers_history,
@@ -397,17 +406,25 @@ class Utils:
     @staticmethod
     def get_test_data(size_trigger, dataset):
         if dataset == "MNIST" :
+            trans_mnist_train = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.1307,), (0.3081,))
+                    ])
             data_test = datasets.MNIST(root='./data',
                                         train=False,
-                                        transform=transforms.ToTensor(),
+                                        transform=trans_mnist_train,
                                         download=True)
         elif dataset == "FashionMNIST" :
+            trans_fashionmnist_test = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.2860,), (0.3530,))
+                    ])
             data_test = datasets.FashionMNIST(root='./data',
                                         train=False,
-                                        transform=transforms.ToTensor(),
+                                        transform=trans_fashionmnist_test,
                                         download=True)
         elif dataset == "FEMNIST":
-            data_test = femnist.FEMNIST(root='./data', 
+            data_test = FEMNIST_pytorch.FEMNIST(root='./data', 
                                         train=False, 
                                         transform=transforms.ToTensor(), 
                                         download=True)
@@ -427,13 +444,14 @@ class Utils:
         return trigger_loader, test_loader
     
     @staticmethod
-    def split_train(train_loaders, size_trigger, size_test):
+    def split_train(train_loaders, size_train, size_trigger, size_test):
         random.shuffle(train_loaders)
-        train_data = train_loaders[size_trigger+size_test:]
+        print(len(train_loaders))
+        train_data = train_loaders[:size_train]
         print("preparing trigger")
-        trigger_data = Utils.concat_loaders(train_loaders[:size_trigger], size_trigger)
+        trigger_data = Utils.concat_loaders(train_loaders[size_train:size_train+size_trigger], size_trigger)
         print("preparing train")
-        test_data = Utils.concat_loaders(train_loaders[size_trigger:size_trigger+size_test], size_test)
+        test_data = Utils.concat_loaders(train_loaders[size_train+size_trigger:], size_test)
         return train_data, trigger_data, test_data
     
     @staticmethod
@@ -450,7 +468,7 @@ class Utils:
             batch_size=batch_size,
             shuffle=True,
             drop_last=False,
-            num_workers=4,
+            num_workers=0,
             pin_memory=True,
         )
         return combined_loader
@@ -459,7 +477,6 @@ class Utils:
     def select_clients(clients, nb_clients_per_round):
         selected_clients = random.sample(clients, nb_clients_per_round)
         return selected_clients
-
 
     @staticmethod
     def save_to_json(accuracies, dir_path, file_name):
@@ -472,6 +489,13 @@ class Utils:
         with open(file_path, 'r') as file:
             data = json.load(file)
         return data
+    
+    @staticmethod
+    def save_latex_ready_metrics(metrics, dir_path, file_name): 
+        metrics_string = f"FN/FP/ACC : {' / '.join(metrics)}"
+        file_name = f"{dir_path}/{file_name}.json"
+        with open(file_name, "w") as f:
+            json.dump(metrics_string, f)
 
     @staticmethod
     def aggregate_models(clients):
@@ -502,6 +526,18 @@ class Utils:
         backdoors_list = ["NaiveBackdoor", "SquareBackdoor", "NoiseBackdoor", "MajorityBackdoor", 
          "TargetedBackdoor", "SourcelessBackdoor", "DistBackdoor", "AlternatedBackdoor"]
         return attack_name in backdoors_list
+    
+    @staticmethod
+    def check_gpu_usage():
+    # prints currently alive Tensors and Variables
+        print(f"{len(gc.get_objects())} tensors loaded in memory")
+        print(torch.cuda.mem_get_info())
+        # print(torch.cuda.memory_summary())
+            # try:
+                # if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                    # print(type(obj), obj.size())
+            # except:
+                # pass
 
     # ****** Functions related to FedCVAE
 

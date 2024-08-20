@@ -28,29 +28,33 @@ def plot_accuracies(input_path = "../Results/Baselines/MNIST_non-IID_CNN/test_ac
         config = column
         top_accuracies = accuracies[config]
         # Right lower corner
+        # plt.text(55 , 0.3+0.05*(idx+1), f"{column} best accuracy : {max(top_accuracies)*100:.2f}%\
+    # Achieved on round {np.argmax(top_accuracies)+1}", fontsize =  4 )
         #plt.text(60, 0.1*(idx+1), f"{column} best accuracy : {max(top_accuracies)*100:.2f}%\
         #     \nAchieved on round {np.argmax(top_accuracies)+1}")
         # Upper left corner
-        plt.text(50 , 0.1*(idx+1), f"{column} best accuracy : {max(top_accuracies)*100:.2f}%\
-         Achieved on round {np.argmax(top_accuracies)+1}")
+        # plt.text(0 , 0.6+0.08*(idx+1), f"{column} best accuracy : {max(top_accuracies)*100:.2f}%\
+    # Achieved on round {np.argmax(top_accuracies)+1}", fontsize = 6)
         
     for column in accuracies.columns : 
         accuracies[column] = smooth(accuracies[column], 3)
     print(accuracies.head())
 
-    sns.set(rc={'figure.figsize':(22,18)})
-    ax = sns.lineplot(data=accuracies, dashes = False, palette = ['b','r','black'], linestyle ='solid')
-    #ax = sns.lineplot(data=accuracies, dashes = False, linestyle ='solid')
+    #sns.set(rc={'figure.figsize':(9,9)})
+    #ax = sns.lineplot(data=accuracies, dashes = False, palette = ['b','r','black'], linestyle ='solid')
+    ax = sns.lineplot(data=accuracies, dashes = False, linestyle ='solid')
     ax.set(xlabel="Rounds", 
            ylabel="Test accuracy", 
            title=figtitle)
     ax.set_ylim([0,1.1])
+    ax.legend(fontsize = 8)
+    # ax.legend()
     #plt.xticks(range(1,101))
     plt.savefig(output_path)
     plt.show()
 
 def plot_detection(input_path = "../Results/Baselines/MNIST_non-IID_CNN/test_accuracy_100.json",
-                    output_path= "./demo.png",
+                    output_path= "./demo.pdf",
                     figtitle = "",
                     columns = []): 
     sns.set_theme()
@@ -86,7 +90,7 @@ if __name__ == "__main__" :
                         #output_path="../Results/FedCAM/non-IID_30_NaiveBackdoor/accuracy.png")
     else :
         plot_accuracies(input_path="./accuracies.csv", 
-                output_path= f"./output/{args.figname}.png",
+                output_path= f"./output/{args.figname}.pdf",
                 figtitle = args.figtitle,
                 columns = list(args.columns))
                 #output_path="../Results/FedCAM/non-IID_30_NaiveBackdoor/accuracy.png")

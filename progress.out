@@ -1,0 +1,4 @@
+started script
+MNIST.noDefense.NoAttack.CAM
+MNIST.noDefense.NoAttack.Dirichlet
+MNIST.noDefense.SignFlip.CAM

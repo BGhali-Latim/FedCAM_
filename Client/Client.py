@@ -1,9 +1,10 @@
 import torch
+import random
 from tqdm import tqdm
 from Utils.clientUtils import Utils
 
 class Client:
-    def __init__(self, ids=None, is_attacker=False, dataloader=None, model=None, attack_type=None, device=None, is_suspect=False) -> None:
+    def __init__(self, ids=None, is_attacker=False, dataloader=None, model=None, attack_type=None, device=None, is_suspect=True) -> None:
         self.id = ids
         self.is_attacker = is_attacker
         self.is_suspect = is_suspect
@@ -25,6 +26,9 @@ class Client:
     
     def suspect(self):
         self.is_suspect = True
+    
+    def unsuspect(self):
+        self.is_suspect = False
     
     def is_suspect(self):
         return self.is_suspect
@@ -49,7 +53,7 @@ class Client:
         self.num_samples = len(data.dataset)
 
 
-    def train(self, hp):
+    def train(self, hp, lr, strategy, global_model = None, global_variate = None):
         if self.model is None:
             raise ValueError("The model is not set. Use set_model method to set the model.")
 
@@ -57,10 +61,12 @@ class Client:
                                                          "MajorityBackdoor", "TargetedBackdoor", "SourcelessBackdoor", "DistBackdoor"]:
             self.apply_attack()
             return self.model
+        
+        #self.model._set_trainable()
 
         criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=hp["lr"], weight_decay=hp["wd"])
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+        optimizer = torch.optim.SGD(self.model.parameters(), weight_decay=hp["wd"], lr = lr)#, momentum=0.3)#lr=hp["lr"],)
+        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         for epoch in range(hp["num_epochs"]):
@@ -72,7 +78,7 @@ class Client:
                 if self.is_attacker and self.attack_type == "SourcelessBackdoor":
                     data, labels = sourceless_square_backdoor(data, labels, hp["target"], hp["square_size"])
                 if self.is_attacker and self.attack_type == "AlternatedBackdoor":
-                    if epoch%3 == 0 :
+                    if epoch%5 == 0 :
                         data, labels = sourceless_square_backdoor(data, labels, hp["target"], hp["square_size"])
                 if self.is_attacker and self.attack_type in ["MajorityBackdoor", "TargetedBackdoor","SquareBackdoor"]:
                     data, labels = square_backdoor(data, labels, hp["source"], hp["target"], hp["square_size"])
@@ -80,14 +86,55 @@ class Client:
                     data, labels = noise_backdoor(data, labels, hp["source"], hp["target"], hp["back_noise_avg"], hp["back_noise_std"])
                 if self.is_attacker and self.attack_type == "DistBackdoor":
                     data, labels = distributed_square_backdoor(data, labels, hp["target"], hp["square_size"], self.id%4)
-
-
+                
                 outputs = self.model(data)
-                loss = criterion(outputs, labels)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                scheduler.step(loss)
+
+                if strategy == "FedAvg" :
+                    # Compute loss
+                    loss = criterion(outputs, labels)
+                    # Update model
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    #scheduler.step(loss)
+                elif strategy == "FedProx" : 
+                    # Compute proximal loss
+                    mu = 0.1
+                    proximal_term = 0
+                    for w, w_t in zip(self.model.parameters(), global_model.parameters()):
+                                    proximal_term += (w - w_t).norm(2)
+                    loss = criterion(outputs, labels) + (mu / 2) * proximal_term
+                    # Update model
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    # scheduler.step(loss)
+                elif strategy == "SCAFFOLD" :
+                    # Compute loss
+                    loss = criterion(outputs, labels)
+                    # Update model
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    # scheduler.step(loss)
+                    # Adjust weights by accounting for variates
+                    for param, l_variate, g_variate in zip(self.model.parameters(), self.control_variate, global_variate): 
+                        param.data += lr * (l_variate - g_variate)
+                else : 
+                    print("please provide a valid aggregation strategy")
+
+        # test individual
+        #self.model.eval()
+        #correct, total = 0, 0 
+        #for data, labels in self.dataloader:
+        #    data, labels = data.to(device), labels.to(device)
+        #    outputs = self.model(data)
+        #    _, predicted = torch.max(outputs.data, 1)
+        #    total += labels.size(0)
+        #    correct += (predicted == labels).sum().item()
+        #print(f"model accuracy : {correct/total}")
+        
+        #self.print_coefs()
 
         return self.model
     
@@ -100,6 +147,10 @@ class Client:
             self.sign_flip()
         elif self.attack_type == "SameSample":
             self.same_value_from_sample()
+        elif self.attack_type == "Scaled":
+            self.scaled_attack()
+        elif self.attack_type == "Pruning":
+            self.pruning_attack()
         else:
             raise ValueError("Unknown or unsupported attack type for direct parameter manipulation.")
 
@@ -116,6 +167,14 @@ class Client:
         for param in self.model.parameters():
             param.data *= -1
     
+    def scaled_attack(self):
+        for param in self.model.parameters():
+            param.data *= 10
+    
+    def pruning_attack(self):
+        for param in self.model.parameters():
+            param.data *= random.randint(0,1)
+    
     def save_sample_params(self): 
         sample_path = f"sample_params.sdct"
         torch.save(self.model.state_dict(), sample_path)
@@ -123,6 +182,10 @@ class Client:
     def same_value_from_sample(self):
         sample_path = f"sample_params.sdct"
         self.model.load_state_dict(torch.load(sample_path))
+    
+    def print_coefs(self):
+        for param in self.model.parameters():
+            print(param.data)
     
     # FedGuard functions
     

@@ -1,0 +1,75 @@
+started script
+MNIST.fledge.AdditiveNoise.CAM
+MNIST.fledge.AdditiveNoise.Dirichlet
+started script
+started script
+MNIST.fledge.AdditiveNoise.CAM
+MNIST.fledge.AdditiveNoise.Dirichlet
+MNIST.fedCAM.AdditiveNoise.CAM
+MNIST.fedCAM.AdditiveNoise.Dirichlet
+FashionMNIST.fledge.AdditiveNoise.CAM
+FashionMNIST.fledge.AdditiveNoise.Dirichlet
+FashionMNIST.fedCAM.AdditiveNoise.CAM
+FashionMNIST.fedCAM.AdditiveNoise.Dirichlet
+finished fledge
+started script
+started script
+started script
+MNIST.fledge.Scaled.CAM
+MNIST.fledge.Scaled.Dirichlet
+MNIST.fledge.Pruning.CAM
+MNIST.fledge.Pruning.Dirichlet
+MNIST.fedCAM.Scaled.CAM
+MNIST.fedCAM.Scaled.Dirichlet
+MNIST.fedCAM.Pruning.CAM
+started script
+MNIST.fedCAM_dev.Scaled.CAM
+started script
+MNIST.fedCAM_dev.Pruning.CAM
+MNIST.fedCAM_dev.Pruning.Dirichlet
+MNIST.fedCAM_dev.Scaled.CAM
+MNIST.fedCAM_dev.Scaled.Dirichlet
+MNIST.fledge.Pruning.CAM
+MNIST.fledge.Pruning.Dirichlet
+MNIST.fledge.Scaled.CAM
+MNIST.fledge.Scaled.Dirichlet
+MNIST.noDefense.Pruning.CAM
+MNIST.noDefense.Pruning.Dirichlet
+MNIST.noDefense.Scaled.CAM
+MNIST.noDefense.Scaled.Dirichlet
+FashionMNIST.fedCAM_dev.Pruning.CAM
+FashionMNIST.fedCAM_dev.Pruning.Dirichlet
+FashionMNIST.fedCAM_dev.Scaled.CAM
+FashionMNIST.fedCAM_dev.Scaled.Dirichlet
+FashionMNIST.fledge.Pruning.CAM
+FashionMNIST.fledge.Pruning.Dirichlet
+FashionMNIST.fledge.Scaled.CAM
+FashionMNIST.fledge.Scaled.Dirichlet
+FashionMNIST.noDefense.Pruning.CAM
+FashionMNIST.noDefense.Pruning.Dirichlet
+FashionMNIST.noDefense.Scaled.CAM
+FashionMNIST.noDefense.Scaled.Dirichlet
+finished fledge
+started script
+started script
+MNIST.fedCAM_dev.Scaled.CAM
+MNIST.fedCAM_dev.Scaled.Dirichlet
+started script
+MNIST.fedCAM_dev.Scaled.CAM
+started script
+MNIST.fedCAM_dev.Scaled.CAM
+FashionMNIST.fedCAM_dev.Scaled.CAM
+finished fledge
+started script
+MNIST.fedCAM_dev.Scaled.CAM
+started script
+started script
+MNIST.fedCAM_dev.Scaled.CAM
+started script
+started script
+started script
+MNIST.fedCAM_dev.Scaled.CAM
+MNIST.fedCAM_dev.Scaled.Dirichlet
+FashionMNIST.fedCAM_dev.Scaled.CAM
+FashionMNIST.fedCAM_dev.Scaled.Dirichlet
+finished fledge

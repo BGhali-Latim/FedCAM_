@@ -2,3 +2,16 @@ Results/FedCAM
 Results/FedCVAE
 Results/NoDefence
 data/MNIST
+Results/
+data/ 
+fedcam_env 
+final_results/ 
+logs/ 
+Plots/final_results/
+Plots/output/
+Plots/plotted/ 
+plots/ROC/ 
+__pycache__
+.idea 
+py3.8env 
+runs/

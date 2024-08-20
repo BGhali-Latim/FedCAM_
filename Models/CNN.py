@@ -3,71 +3,242 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data
 
-#class CNN(nn.Module):
-#    def __init__(self, input_channels = 1, fc_input = 576):
-#        super(CNN, self).__init__()
-#        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=5)
-#        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
-#        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
-#        self.fc1 = nn.Linear(fc_input, 256)
-#        self.fc2 = nn.Linear(256, 10)
-#        self.activation_fc = nn.Linear(256, 1600)
-#        for p in self.activation_fc.parameters():
-#            p.requires_grad_(False)
-#
-#    def forward(self, x):
-#        x = x.view(-1,1,28,28)
-#        x = F.relu(self.conv1(x))
-#        x = F.dropout(x, p=0.5, training=self.training)
-#        x = F.relu(F.max_pool2d(self.conv2(x), 2))
-#        x = F.dropout(x, p=0.5, training=self.training)
-#        x = F.relu(F.max_pool2d(self.conv3(x),2))
-#        x = F.dropout(x, p=0.5, training=self.training)
-#        x = torch.flatten(x, start_dim=1)
-#        x = F.relu(self.fc1(x))
-#        x = F.dropout(x, training=self.training)
-#        x = self.fc2(x)
-#        return F.log_softmax(x, dim=1)
-#    
-#    def get_activations_1(self, x):
-#        x = x.view(-1,1,28,28)
-#        x= F.relu(self.conv1(x))
-#        return torch.flatten(x, start_dim=1)
-#
-#    def get_activations_2(self, x):
-#        x = x.view(-1,1,28,28)
-#        x= F.relu(self.conv1(x)) # CHANGE RELU
-#        x = F.max_pool2d(self.conv2(x),2) # CHANGE RELU
-#        return torch.flatten(x, start_dim=1)
-#    
-#    def get_activations_3(self, x):
-#        x = x.view(-1,1,28,28)
-#        x= F.relu(self.conv1(x))
-#        x = F.relu(F.max_pool2d(self.conv2(x),2))
-#        x = F.max_pool2d(self.conv3(x),2)
-#        return torch.flatten(x, start_dim=1)
-#    
-#    def get_activations_4(self, x):
-#        x = x.view(-1,1,28,28)
-#        x= F.relu(self.conv1(x))
-#        x = F.relu(F.max_pool2d(self.conv2(x),2))
-#        x = F.relu(F.max_pool2d(self.conv3(x),2)) 
-#        x = torch.flatten(x, start_dim=1)
-#        x = self.fc1(x)
-#        return torch.flatten(x, start_dim=1)
-#    
+class DropBlock2D(nn.Module):
+    def __init__(self, block_size, drop_prob):
+        super(DropBlock2D, self).__init__()
+        self.block_size = block_size
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        if not self.training or self.drop_prob == 0.0:
+            return x
+        
+        gamma = self.drop_prob / (self.block_size ** 2)
+        for sh in x.shape[2:]:
+            gamma *= sh / (sh - self.block_size + 1)
+        
+        mask = (torch.rand(x.shape[0], *x.shape[2:]) < gamma).float().to(x.device)
+        block_mask = F.max_pool2d(mask.unsqueeze(1), kernel_size=(self.block_size, self.block_size), stride=(1, 1), padding=self.block_size // 2)
+        block_mask = 1 - block_mask.squeeze(1)
+        
+        x = x * block_mask.unsqueeze(1)
+        x = x * (block_mask.numel() / block_mask.sum())
+        
+        return x
+
+class CNNWithDropBlock(nn.Module):
+    def __init__(self, drop_prob=0.1, block_size=7, input_channels = 1, fc_input = 1280):
+        super(CNNWithDropBlock, self).__init__()
+        self.conv1 = nn.Conv2d(input_channels, 40, kernel_size=5)
+        self.conv2 = nn.Conv2d(40, 80, kernel_size=5)
+        #self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+        self.fc_int= nn.Linear(fc_input, 512)
+        self.fc1 = nn.Linear(512, 256)
+        self.fc2 = nn.Linear(256, 10)
+        
+        self.dropblock = DropBlock2D(block_size=block_size, drop_prob=drop_prob)
+        self.dropout = nn.Dropout(0.7)
+
+        self.bn_postconv = nn.BatchNorm2d(80)
+        
+    def forward(self, x):
+        x = x.view(-1,1,28,28)
+        # ----------------------------
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.dropblock(x)
+        # ----------------------------
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        # ----------------------------
+        #x = self.dropblock(x)
+        #x = F.relu(self.conv3(x))
+        #x = F.max_pool2d(x, 2)
+        #x = self.dropblock(x)
+        # ----------------------------
+        x = x.view(x.size(0), -1)
+        # ----------------------------
+        x = self.fc_int(x)
+        x = F.tanh(x)
+        x = self.dropout(x)
+        # ----------------------------
+        x = self.fc1(x)
+        x = F.tanh(x)
+        x = self.dropout(x)
+        # ----------------------------
+        x = self.fc2(x)
+        return x
+    
+    def get_activations(self, x): 
+        with torch.no_grad() :
+            x = x.view(-1,1,28,28)
+            # ----------------------------
+            x1 = self.conv1(x)
+            x = F.relu(x1)
+            x = F.max_pool2d(x, 2)
+            x = self.dropblock(x)
+            # ----------------------------
+            x2 = self.conv2(x)
+            x = F.relu(x2)
+            x = F.max_pool2d(x, 2)
+            # ----------------------------
+            #x = self.dropblock(x)
+            #x = F.relu(self.conv3(x))
+            #x = F.max_pool2d(x, 2)
+            #x = self.dropblock(x)
+            # ----------------------------
+            x = x.view(x.size(0), -1)
+            # ----------------------------
+            x3 = self.fc_int(x)
+            x = F.tanh(x3)
+            x = self.dropout(x)
+            # ----------------------------
+            x4 = self.fc1(x)
+            return torch.cat((
+                             torch.flatten(x1,start_dim=1), 
+                             torch.flatten(x2,start_dim=1),
+                             torch.flatten(x3,start_dim=1),
+                             torch.flatten(x4,start_dim=1),
+                             )
+                             ,dim = 1)
+    
+    def get_activations_last(self, x): 
+        with torch.no_grad() :
+            x = x.view(-1,1,28,28)
+            # ----------------------------
+            x1 = self.conv1(x)
+            x = F.relu(x1)
+            x = F.max_pool2d(x, 2)
+            x = self.dropblock(x)
+            # ----------------------------
+            x2 = self.conv2(x)
+            x = F.relu(x2)
+            x = F.max_pool2d(x, 2)
+            # ----------------------------
+            #x = self.dropblock(x)
+            #x = F.relu(self.conv3(x))
+            #x = F.max_pool2d(x, 2)
+            #x = self.dropblock(x)
+            # ----------------------------
+            x = x.view(x.size(0), -1)
+            # ----------------------------
+            x3 = self.fc_int(x)
+            x = F.tanh(x3)
+            x = self.dropout(x)
+            # ----------------------------
+            x4 = self.fc1(x)
+            return torch.flatten(x4,start_dim=1)
+
+class CNN(nn.Module):
+    def __init__(self, input_channels = 1, fc_input = 576):
+        super(CNN, self).__init__()
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+        self.fc1 = nn.Linear(fc_input, 256)
+        self.fc2 = nn.Linear(256, 10)
+     #    self.activation_fc = nn.Linear(256, 1600)
+     #    for p in self.activation_fc.parameters():
+         #    p.requires_grad_(False)   
+    def forward(self, x):
+        x = x.view(-1,1,28,28)
+        x = F.relu(self.conv1(x))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv3(x),2))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = torch.flatten(x, start_dim=1)
+        x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
+        x = self.fc2(x)
+        return x
+        #return F.log_softmax(x, dim=1)
+
+    def get_activations_1(self, x):
+        x = x.view(-1,1,28,28)
+        x= F.relu(self.conv1(x))
+        return torch.flatten(x, start_dim=1)    
+    def get_activations_2(self, x):
+        x = x.view(-1,1,28,28)
+        x= F.relu(self.conv1(x)) # CHANGE RELU
+        x = F.max_pool2d(self.conv2(x),2) # CHANGE RELU
+        return torch.flatten(x, start_dim=1)
+
+    def get_activations_3(self, x):
+        x = x.view(-1,1,28,28)
+        x= F.relu(self.conv1(x))
+        x = F.relu(F.max_pool2d(self.conv2(x),2))
+        x = F.max_pool2d(self.conv3(x),2)
+        return torch.flatten(x, start_dim=1)
+
+    def get_activations_4(self, x):
+        x = x.view(-1,1,28,28)
+        x= F.relu(self.conv1(x))
+        x = F.relu(F.max_pool2d(self.conv2(x),2))
+        x = F.relu(F.max_pool2d(self.conv3(x),2)) 
+        x = torch.flatten(x, start_dim=1)
+        x = self.fc1(x)
+        return torch.flatten(x, start_dim=1)
+
+    def get_activations(self, x): 
+        with torch.no_grad() :
+            x = x.view(-1,1,28,28)
+            # x1 = F.relu(self.conv1(x))
+            # x2 = F.relu(F.max_pool2d(self.conv2(x1),2))
+            # x3 = F.relu(F.max_pool2d(self.conv3(x2),2)) 
+            # x3 = torch.flatten(x3, start_dim=1)
+            # x4 = self.fc1(x3)
+            x = x.view(-1,1,28,28)
+            x1 = self.conv1(x)
+            x = F.relu(x1)
+            x2 = F.max_pool2d(self.conv2(x),2)
+            x = F.relu(x2)
+            x3 = F.max_pool2d(self.conv3(x),2)
+            x3 = torch.flatten(x3, start_dim=1)
+            x = F.relu(x3)
+            x4 = self.fc1(x)
+            return torch.cat((
+                             torch.flatten(x1,start_dim=1), 
+                             torch.flatten(x2,start_dim=1),
+                             torch.flatten(x3,start_dim=1),
+                             torch.flatten(x4,start_dim=1),
+                             )
+                             ,dim = 1)
+    
+    def get_activations_unflattened(self, x): 
+         with torch.no_grad() :
+             x = x.view(-1,1,28,28)
+             # x1 = F.relu(self.conv1(x))
+             # x2 = F.relu(F.max_pool2d(self.conv2(x1),2))
+             # x3 = F.relu(F.max_pool2d(self.conv3(x2),2)) 
+             # x3 = torch.flatten(x3, start_dim=1)
+             # x4 = self.fc1(x3)
+             x = x.view(-1,1,28,28)
+             x1 = self.conv1(x)
+             x = F.relu(x1)
+             x2 = F.max_pool2d(self.conv2(x),2)
+             x = F.relu(x2)
+             x3 = F.max_pool2d(self.conv3(x),2)
+             x3 = torch.flatten(x3, start_dim=1)
+             x = F.relu(x3)
+             x4 = self.fc1(x)
+             return x1, x2, x3, x4 
+
 #    def get_activation_stems(self, x):
-#        x = x.view(-1,1,28,28)
-#        x= F.relu(self.conv1(x))
-#        x = F.relu(F.max_pool2d(self.conv2(x),2))
-#        x = F.relu(F.max_pool2d(self.conv3(x),2)) 
-#        x = torch.flatten(x, start_dim=1)
-#        x = F.relu(self.fc1(x))
-#        x = self.activation_fc(x)
-#        return torch.flatten(x, start_dim=1)
-#    
+    #    x = x.view(-1,1,28,28)
+    #    x= F.relu(self.conv1(x))
+    #    x = F.relu(F.max_pool2d(self.conv2(x),2))
+    #    x = F.relu(F.max_pool2d(self.conv3(x),2)) 
+    #    x = torch.flatten(x, start_dim=1)
+    #    x = F.relu(self.fc1(x))
+    #    x = self.activation_fc(x)
+    #    return torch.flatten(x, start_dim=1)
+   
 #    def get_activations(self, x):
-#        return self.get_activations_2(x)
+    #    return self.get_activations_2(x)
 #
 #class ResidualCNN(nn.Module):
 #    def __init__(self, input_channels = 1, fc_input = 576, input_size = 28*28):
@@ -130,61 +301,61 @@ import torch.utils.data
 #        #z = self.residual2(z)
 #        return torch.flatten(z, start_dim=1)
 
-class CNN(nn.Module):
-    def __init__(self, input_channels = 1, fc_input = 576):
-        super(CNN, self).__init__()
-        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=5)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
-        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
-        self.fc1 = nn.Linear(fc_input, 256)
-        self.fc2 = nn.Linear(256, 10)
+# class CNN(nn.Module):
+    # def __init__(self, input_channels = 1, fc_input = 576):
+        # super(CNN, self).__init__()
+        # self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=5)
+        # self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        # self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+        # self.fc1 = nn.Linear(fc_input, 256)
+        # self.fc2 = nn.Linear(256, 10)
         #self.activation_fc = nn.Linear(256, 1600)
         #for p in self.activation_fc.parameters():
         #    p.requires_grad_(False)
 
-    def forward(self, x):
-        x = x.view(-1,1,28,28)
-        x = F.tanh(self.conv1(x))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.tanh(F.max_pool2d(self.conv2(x), 2))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.tanh(F.max_pool2d(self.conv3(x),2))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = torch.flatten(x, start_dim=1)
-        x = F.tanh(self.fc1(x))
-        x = F.dropout(x, training=self.training)
-        x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+    # def forward(self, x):
+        # x = x.view(-1,1,28,28)
+        # x = F.tanh(self.conv1(x))
+        # x = F.dropout(x, p=0.5, training=self.training)
+        # x = F.tanh(F.max_pool2d(self.conv2(x), 2))
+        # x = F.dropout(x, p=0.5, training=self.training)
+        # x = F.tanh(F.max_pool2d(self.conv3(x),2))
+        # x = F.dropout(x, p=0.5, training=self.training)
+        # x = torch.flatten(x, start_dim=1)
+        # x = F.tanh(self.fc1(x))
+        # x = F.dropout(x, training=self.training)
+        # x = self.fc2(x)
+        # return F.log_softmax(x, dim=1)
     
-    def get_activations_1(self, x):
-        x = x.view(-1,1,28,28)
-        x= F.leaky_relu(self.conv1(x))
-        return torch.flatten(x, start_dim=1)
+    # def get_activations_1(self, x):
+        # x = x.view(-1,1,28,28)
+        # x= F.leaky_relu(self.conv1(x))
+        # return torch.flatten(x, start_dim=1)
 
-    def get_activations_2(self, x):
-        x = x.view(-1,1,28,28)
-        x= F.leaky_relu(self.conv1(x)) # CHANGE RELU
-        x = F.max_pool2d(self.conv2(x),2) # CHANGE RELU
-        return torch.flatten(x, start_dim=1)
+    # def get_activations_2(self, x):
+        # x = x.view(-1,1,28,28)
+        # x= F.tanh(self.conv1(x)) # CHANGE RELU
+        # x = F.max_pool2d(self.conv2(x),2) # CHANGE RELU
+        # return torch.flatten(x, start_dim=1)
     
-    def get_activations_3(self, x):
-        x = x.view(-1,1,28,28)
-        x= F.leaky_relu(self.conv1(x))
-        x = F.leaky_relu(F.max_pool2d(self.conv2(x),2))
-        x = F.max_pool2d(self.conv3(x),2)
-        return torch.flatten(x, start_dim=1)
+    # def get_activations_3(self, x):
+        # x = x.view(-1,1,28,28)
+        # x= F.leaky_relu(self.conv1(x))
+        # x = F.leaky_relu(F.max_pool2d(self.conv2(x),2))
+        # x = F.max_pool2d(self.conv3(x),2)
+        # return torch.flatten(x, start_dim=1)
     
-    def get_activations_4(self, x):
-        x = x.view(-1,1,28,28)
-        x= F.tanh(self.conv1(x))
-        x = F.tanh(F.max_pool2d(self.conv2(x),2))
-        x = F.tanh(F.max_pool2d(self.conv3(x),2)) 
-        x = torch.flatten(x, start_dim=1)
-        x = F.tanh(self.fc1(x))
-        return x
+    # def get_activations_4(self, x):
+        # x = x.view(-1,1,28,28)
+        # x= F.tanh(self.conv1(x))
+        # x = F.tanh(F.max_pool2d(self.conv2(x),2))
+        # x = F.tanh(F.max_pool2d(self.conv3(x),2)) 
+        # x = torch.flatten(x, start_dim=1)
+        # x = F.tanh(self.fc1(x))
+        # return x
     
-    def get_activations(self, x):
-        return self.get_activations_4(x)
+    # def get_activations(self, x):
+        # return self.get_activations_4(x)
 
 class GuardCNN(nn.Module):
     def __init__(self):

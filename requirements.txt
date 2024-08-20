@@ -4,3 +4,4 @@ numpy~=1.23.5
 torchvision~=0.14.1
 tqdm~=4.65.0
 geom_median
+seaborn

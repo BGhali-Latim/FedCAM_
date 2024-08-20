@@ -23,13 +23,11 @@ import datetime
 from Server.Server import Server
 
 class DefenseServer(Server):
-    def __init__(self, cf=None, model=None, attack_type=None, attacker_ratio=None, dataset = None, sampler = None, experiment_name = 'debug'):
-        super().__init__(cf, model, attack_type, attacker_ratio, dataset, sampler)
-        # Defense server
-        self.defence = True
+    def __init__(self, cf=None, model=None, attack_type=None, attacker_ratio=None, dataset = None, experiment_name = 'debug'):
+        super().__init__(cf, model, attack_type, attacker_ratio, dataset)
 
         # Saving directory
-        self.dir_path = f"Results/{experiment_name}/{self.dataset}/{sampler.name}/FedCAM/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
+        self.dir_path = f"Results/{experiment_name}/{self.dataset}/FedCAM/{self.cf['data_dist']}_{int(attacker_ratio * 100)}_{attack_type}"
         if os.path.exists(self.dir_path):
             shutil.rmtree(self.dir_path)
         os.makedirs(self.dir_path)
@@ -100,7 +98,7 @@ class DefenseServer(Server):
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                activation = input_cvae_model.get_activations_last(data)
+                activation = input_cvae_model.get_activations(data)
                 input_models_act[epoch] = activation
                 labels_act = labels
                 break
@@ -121,9 +119,7 @@ class DefenseServer(Server):
 
                 condition = Utils.one_hot_encoding(labels_act, self.num_classes, self.device)
                 recon_batch, mu, logvar = self.cvae(activation, condition)
-                mse, kld = Utils.cvae_loss(recon_batch, activation, mu, logvar)
-
-                loss = mse + kld
+                loss = Utils.cvae_loss(recon_batch, activation, mu, logvar)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -148,7 +144,7 @@ class DefenseServer(Server):
             labels_cat = torch.tensor([]).to(self.device)
             for data, label in self.trigger_loader:
                 data, label = data.to(self.device), label.to(self.device)
-                activation = client_model.model.get_activations_last(data)
+                activation = client_model.model.get_activations(data)
                 clients_act[client_nb] = activation
                 labels_cat = label
                 break

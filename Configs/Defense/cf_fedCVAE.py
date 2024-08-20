@@ -1,7 +1,7 @@
 # Hyperparameters for a federated learning system
 # Language: Python
 
-configs_fedCVAE = {
+config = {
     "dataset": "MNIST",
     "nb_classes": 10,
 
@@ -9,18 +9,17 @@ configs_fedCVAE = {
     "size_test": 500,
 
     # Clients Settings
-    "num_epochs": 1,  # Number of epochs for training
-    "batch_size": 64,  # Batch size for training
-    "lr": 0.01,#0.01#5e-3, #3e-4, #5e-4, # Learning rate #3e-4
+    "num_epochs": 3,# 5,  # Number of epochs for training
+    "batch_size": 64,# 128,  # Batch size for training
+    "lr": 1e-3,# 5e-4,  # Learning rate
     "num_classes": 10,  # Number of classes in the dataset
-    "wd": 0,  # Weight decay for Clients model
+    "wd": 1e-5,  # Weight decay for Clients model
     #FL Settings
     "data_dist": "non-IID", # For the moment we are considering only the IID data distribution
-    "nb_rounds": 50,  # Maximum number of communication rounds for federated learning
+    "nb_rounds": 100,  # Maximum number of communication rounds for federated learning
     "aggregation": "FedAvg",  # Aggregation method for model updates
-    "num_clients": 20,  # Total number of clients in the federated learning system
-    "nb_clients_per_round": 10,  # Number of clients selected for each round
-    "mixup" : False,#True,
+    "num_clients": 100,  # Total number of clients in the federated learning system
+    "nb_clients_per_round": 50,  # Number of clients selected for each round 
     
     "validation_size": 100, # Validation loader size
 
